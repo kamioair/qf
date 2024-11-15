@@ -1,0 +1,34 @@
+############################### MQTT Config ###############################
+# 默认MQTT配置
+#   logMode：日志模式，NONE|CONSOLE|FILE|UPLOAD|ALL
+#   addr：服务器broker地址
+#   username：用户名
+#   password：密码
+mqtt:
+  addr: "ws://127.0.0.1:5002/ws"
+  logMode: "CONSOLE"
+  username: ""
+  password: ""
+  timeOut: 3000
+  retry: 3
+
+############################### Db Config ###############################
+# 默认数据库配置
+# connect：数据库连接串
+#   sqlite|./db/data.db&OFF
+#       - DELETE：在事务提交后，删除journal文件
+#       - MEMORY：在内存中生成journal文件，不写入磁盘
+#       - WAL：使用WAL（Write-Ahead Logging）模式，将journal记录写入WAL文件中
+#       - OFF：完全关闭journal模式，不记录任何日志消息
+#   sqlserver|用户名:密码@地址?database=数据库&encrypt=disable
+#   mysql|用户名:密码@tcp(127.0.0.1:3306)/数据库?charset=utf8mb4&parseTime=True&loc=Local
+# 其他设置
+#   openLog：是否打开调试日志
+#   skipDefaultTransaction：是否跳过默认事务
+db:
+  connect: sqlite|./db/data.db&OFF
+  config:
+    openLog: false
+    skipDefaultTransaction: true
+
+############################### Modules Config ###############################
