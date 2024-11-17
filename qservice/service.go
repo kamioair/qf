@@ -1,6 +1,7 @@
 package qservice
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/kamioair/qf/qdefine"
@@ -14,8 +15,9 @@ import (
 )
 
 type MicroService struct {
-	adapter easyCon.IAdapter
-	setting *Setting
+	adapter       easyCon.IAdapter
+	setting       *Setting
+	retainContent map[string]any
 }
 
 // NewService 创建服务
@@ -28,7 +30,8 @@ func NewService(setting *Setting) *MicroService {
 
 	// 创建服务
 	serv := &MicroService{
-		setting: setting,
+		setting:       setting,
+		retainContent: make(map[string]any),
 	}
 
 	// 启动访问器
@@ -69,15 +72,6 @@ func (serv *MicroService) newModuleName(module, code string) string {
 
 // SendRequest 向服务器其他模块发送请求，单机两者效果一致
 func (serv *MicroService) SendRequest(module, route string, params any) (qdefine.Context, error) {
-	return serv.doSendRequest(module, route, "", params)
-}
-
-// SendRequestLocal 向本机其他模块发送请求，单机两者效果一致
-func (serv *MicroService) SendRequestLocal(module, route string, params any) (qdefine.Context, error) {
-	return serv.doSendRequest(module, route, serv.setting.DevCode, params)
-}
-
-func (serv *MicroService) doSendRequest(module, route, devCode string, params any) (qdefine.Context, error) {
 	var resp easyCon.PackResp
 
 	if strings.Contains(module, "/") {
@@ -86,14 +80,14 @@ func (serv *MicroService) doSendRequest(module, route, devCode string, params an
 		newParams["Module"] = module
 		newParams["Route"] = route
 		newParams["Content"] = params
-		resp = serv.adapter.Req("Route", "Request", newParams)
+		resp = serv.adapter.Req(routeModuleName, "Request", newParams)
 	} else {
 		// 常规请求
-		resp = serv.adapter.Req(newModuleName(module, devCode), route, params)
+		resp = serv.adapter.Req(module, route, params)
 	}
 	if resp.RespCode == easyCon.ERespSuccess {
 		// 返回成功
-		return newControlResp(resp)
+		return newContentByResp(resp)
 	}
 	// 返回异常
 	if resp.RespCode == easyCon.ERespTimeout {
@@ -106,6 +100,12 @@ func (serv *MicroService) doSendRequest(module, route, devCode string, params an
 		return nil, errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request forbidden"))
 	}
 	return nil, errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
+}
+
+// SendNoticeRetain 发送Retain消息
+func (serv *MicroService) SendNoticeRetain(route string, content any) error {
+	serv.retainContent[route] = content
+	return serv.adapter.SendRetainNotice("GlobalRetainNotice", serv.retainContent)
 }
 
 // SendNotice 发送通知
@@ -140,6 +140,7 @@ func (serv *MicroService) initAdapter() {
 	newName := newModuleName(serv.setting.Module, serv.setting.DevCode)
 	apiSetting := easyCon.NewSetting(newName, serv.setting.Broker.Addr, serv.onReq, serv.onStatusChanged)
 	apiSetting.OnNotice = serv.onNotice
+	apiSetting.OnRetainNotice = serv.onRetainNotice
 	apiSetting.UID = serv.setting.Broker.UId
 	apiSetting.PWD = serv.setting.Broker.Pwd
 	apiSetting.TimeOut = time.Duration(serv.setting.Broker.TimeOut) * time.Second
@@ -149,13 +150,17 @@ func (serv *MicroService) initAdapter() {
 
 	// 如果是路由模式，则向上级自报家门
 	if _, ok := strconv.Atoi(serv.setting.DevCode); ok == nil {
-		info := map[string]string{}
-		info["DeviceCode"] = serv.setting.DevCode
-		info["DeviceDesc"] = ""
-		info["ModuleName"] = serv.setting.Module
-		info["ModuleDesc"] = serv.setting.Desc
-		info["Version"] = serv.setting.Version
-		_, _ = serv.SendRequest(clientManageName, "KnockDoor", info)
+		info := map[string]any{}
+		info["Id"] = serv.setting.DevCode
+		info["Name"] = serv.setting.DevName
+		info["Modules"] = []map[string]string{
+			{
+				"Name":    serv.setting.Module,
+				"Desc":    serv.setting.Desc,
+				"Version": serv.setting.Version,
+			},
+		}
+		_, _ = serv.SendRequest(clientModuleName, "KnockDoor", info)
 	}
 }
 
@@ -180,7 +185,7 @@ func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp 
 		return easyCon.ERespSuccess, nil
 	}
 	if serv.setting.onReqHandler != nil {
-		ctx, err1 := newControlReq(pack)
+		ctx, err1 := newContentByReq(pack)
 		if err1 != nil {
 			return easyCon.ERespError, err1.Error()
 		}
@@ -214,11 +219,34 @@ func (serv *MicroService) onNotice(notice easyCon.PackNotice) {
 
 	// 外置方法
 	if serv.setting.onNoticeHandler != nil {
-		ctx, err := newControlNotice(notice)
+		ctx, err := newContentByNotice(notice)
 		if err != nil {
 			panic(err)
 		}
 		serv.setting.onNoticeHandler(notice.Route, ctx)
+	}
+}
+
+func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
+	defer errRecover(func(err string) {
+		// 记录日志
+		writeErrLog("service.onNotice", err)
+	})
+
+	if notice.Route == "GlobalRetainNotice" {
+		str, _ := json.Marshal(notice.Content)
+		_ = json.Unmarshal(str, &serv.retainContent)
+
+		// 外置方法
+		if serv.setting.onRetainNoticeHandler != nil {
+			for k, v := range serv.retainContent {
+				ctx, err := newContentByData(v)
+				if err != nil {
+					panic(err)
+				}
+				serv.setting.onRetainNoticeHandler(k, ctx)
+			}
+		}
 	}
 }
 

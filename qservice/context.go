@@ -24,7 +24,7 @@ type values struct {
 	OutputValue interface{}
 }
 
-func newControlReq(pack easyCon.PackReq) (*context, error) {
+func newContentByReq(pack easyCon.PackReq) (*context, error) {
 	ctx := &context{
 		reqPack: pack,
 		values: &values{
@@ -38,7 +38,7 @@ func newControlReq(pack easyCon.PackReq) (*context, error) {
 	return ctx, nil
 }
 
-func newControlResp(pack easyCon.PackResp) (*context, error) {
+func newContentByResp(pack easyCon.PackResp) (*context, error) {
 	ctx := &context{
 		respPack: pack,
 		values: &values{
@@ -52,7 +52,7 @@ func newControlResp(pack easyCon.PackResp) (*context, error) {
 	return ctx, nil
 }
 
-func newControlNotice(pack easyCon.PackNotice) (*context, error) {
+func newContentByNotice(pack easyCon.PackNotice) (*context, error) {
 	ctx := &context{
 		noticePack: pack,
 		values: &values{
@@ -60,6 +60,19 @@ func newControlNotice(pack easyCon.PackNotice) (*context, error) {
 		},
 	}
 	err := setData(ctx, pack.Content)
+	if err != nil {
+		return nil, err
+	}
+	return ctx, nil
+}
+
+func newContentByData(value any) (*context, error) {
+	ctx := &context{
+		values: &values{
+			InputMaps: make([]map[string]interface{}, 0),
+		},
+	}
+	err := setData(ctx, value)
 	if err != nil {
 		return nil, err
 	}

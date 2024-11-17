@@ -1,5 +1,7 @@
 package qdefine
 
+import "github.com/google/uuid"
+
 // File 文件
 type File struct {
 	Name string // 文件名
@@ -45,3 +47,11 @@ const (
 	ECommStateFault      ECommState = "Fault"      //故障
 	ECommStateStopped    ECommState = "Stopped"    //已停止
 )
+
+func NewUUID() string {
+	id, err := uuid.NewUUID()
+	if err != nil {
+		return ""
+	}
+	return id.String()
+}
