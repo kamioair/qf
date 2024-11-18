@@ -9,6 +9,7 @@ import (
 	"github.com/kamioair/qf/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -56,8 +57,8 @@ func (serv *MicroService) Setting() Setting {
 }
 
 // ResetClient 重置客户端
-func (serv *MicroService) ResetClient(code string) {
-	serv.setting.SetDeviceCode(code)
+func (serv *MicroService) ResetClient(devCode string) {
+	serv.setting.SetDeviceCode(devCode)
 	// 重新创建服务
 	serv.initAdapter()
 }
@@ -130,6 +131,10 @@ func (serv *MicroService) SendLog(logType qdefine.ELog, content string, err erro
 	}
 }
 
+func (serv *MicroService) IsRoot() bool {
+	return serv.setting.Root
+}
+
 func (serv *MicroService) initAdapter() {
 	// 先停止
 	if serv.adapter != nil {
@@ -148,8 +153,10 @@ func (serv *MicroService) initAdapter() {
 	apiSetting.LogMode = easyCon.ELogMode(serv.setting.Broker.LogMode)
 	serv.adapter = easyCon.NewMqttAdapter(apiSetting)
 
+	time.Sleep(time.Second)
+
 	// 如果是路由模式，则向上级自报家门
-	if _, ok := strconv.Atoi(serv.setting.DevCode); ok == nil {
+	if serv.setting.DevCode != "" && isUUID(serv.setting.DevCode) == false {
 		info := map[string]any{}
 		info["Id"] = serv.setting.DevCode
 		info["Name"] = serv.setting.DevName
@@ -271,4 +278,9 @@ func (serv *MicroService) onStop() {
 		serv.adapter.Stop()
 		serv.adapter = nil
 	}
+}
+
+func isUUID(uuid string) bool {
+	r, _ := regexp.Compile("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
+	return r.MatchString(uuid)
 }

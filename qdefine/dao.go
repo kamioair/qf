@@ -269,3 +269,16 @@ func (dao *BaseDao[T]) GetConditionsLimit(maxCount int, query interface{}, args 
 	}
 	return list, nil
 }
+
+// GetCount
+//
+//	@Description: 获取总记录数
+//	@return int64
+func (dao *BaseDao[T]) GetCount() int64 {
+	// 创建空对象
+	model := new(T)
+	// 查询
+	var count int64
+	dao.DB().Model(model).Count(&count)
+	return count
+}

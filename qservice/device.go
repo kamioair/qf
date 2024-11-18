@@ -13,7 +13,6 @@ var DeviceCode deviceCode
 type Device struct {
 	Id   string // 设备码
 	Name string // 设备名称
-	Root bool   `json:"root,omitempty"` // 是否是根级设备
 }
 
 func (dev Device) IsEmpty() bool {
@@ -63,7 +62,7 @@ func getCodeFile() string {
 	root := qio.GetCurrentRoot()
 	switch runtime.GOOS {
 	case "windows":
-		return fmt.Sprintf("%s\\Program Files\\qf\\device", root)
+		return fmt.Sprintf("%s\\Program Files\\Qf\\device", root)
 	case "linux":
 		return "/dev/qf/device"
 	}

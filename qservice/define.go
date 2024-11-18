@@ -16,6 +16,7 @@ const (
 
 // Setting 模块配置
 type Setting struct {
+	Root                  bool                  // 是否是根级服务
 	Module                string                // 模块服务名称
 	Desc                  string                // 模块服务描述
 	Version               string                // 模块服务版本
@@ -79,6 +80,7 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	}
 	// 返回配置
 	return &Setting{
+		Root:    qconfig.Get(module, "root", false),
 		Module:  module,
 		Desc:    moduleDesc,
 		Version: version,
@@ -113,8 +115,8 @@ func (s *Setting) BindStateFunc(onStateHandler qdefine.StateHandler) *Setting {
 	return s
 }
 
-func (s *Setting) SetDeviceCode(code string) *Setting {
-	s.DevCode = code
+func (s *Setting) SetDeviceCode(devCode string) *Setting {
+	s.DevCode = devCode
 	return s
 }
 
