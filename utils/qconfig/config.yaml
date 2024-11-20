@@ -6,9 +6,9 @@
 #   password：密码
 mqtt:
   addr: "ws://127.0.0.1:5002/ws"
-  logMode: "CONSOLE"
-  username: ""
-  password: ""
+  uid: ""
+  pwd: ""
+  logMode: "NONE"
   timeOut: 3000
   retry: 3
 
@@ -30,5 +30,19 @@ db:
   config:
     openLog: false
     skipDefaultTransaction: true
+
+############################### Route Config ###############################
+# 路由配置
+#   mode：模式，client/server/root
+#   upMqtt：上级MQTT连接配置
+route:
+  mode: client
+  upMqtt:
+    addr: ""
+    uid: ""
+    pwd: ""
+    logMode: "NONE"
+    timeOut: 3000
+    retry: 3
 
 ############################### Modules Config ###############################

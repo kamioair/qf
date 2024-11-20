@@ -55,3 +55,13 @@ func NewUUID() string {
 	}
 	return id.String()
 }
+
+// DeviceInfo 本地设备信息
+type DeviceInfo struct {
+	Id   string // 设备码
+	Name string // 设备名称
+}
+
+func (dev DeviceInfo) IsEmpty() bool {
+	return dev.Id == ""
+}

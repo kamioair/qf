@@ -35,7 +35,7 @@ func NewService(setting *Setting) *MicroService {
 		retainContent: make(map[string]any),
 	}
 
-	// 启动访问器
+	// 连接
 	serv.initAdapter()
 
 	return serv
@@ -61,6 +61,8 @@ func (serv *MicroService) ResetClient(devCode string) {
 	serv.setting.SetDeviceCode(devCode)
 	// 重新创建服务
 	serv.initAdapter()
+	// 向Broker敲门
+	serv.KnockDoor()
 }
 
 func (serv *MicroService) newModuleName(module, code string) string {
@@ -131,18 +133,18 @@ func (serv *MicroService) SendLog(logType qdefine.ELog, content string, err erro
 	}
 }
 
-func (serv *MicroService) IsRoot() bool {
-	return serv.setting.Root
-}
-
 func (serv *MicroService) initAdapter() {
 	// 先停止
 	if serv.adapter != nil {
 		serv.adapter.Stop()
 		serv.adapter = nil
 	}
-	// 重新创建
-	newName := newModuleName(serv.setting.Module, serv.setting.DevCode)
+	// 重新创建连接
+	devCode := ""
+	if serv.setting.RouteMode == "client" {
+		devCode = serv.setting.DevCode
+	}
+	newName := newModuleName(serv.setting.Module, devCode)
 	apiSetting := easyCon.NewSetting(newName, serv.setting.Broker.Addr, serv.onReq, serv.onStatusChanged)
 	apiSetting.OnNotice = serv.onNotice
 	apiSetting.OnRetainNotice = serv.onRetainNotice
@@ -153,13 +155,28 @@ func (serv *MicroService) initAdapter() {
 	apiSetting.LogMode = easyCon.ELogMode(serv.setting.Broker.LogMode)
 	serv.adapter = easyCon.NewMqttAdapter(apiSetting)
 
+	// 等待确保连接成功
 	time.Sleep(time.Second)
+}
 
-	// 如果是路由模式，则向上级自报家门
-	if serv.setting.DevCode != "" && isUUID(serv.setting.DevCode) == false {
+func (serv *MicroService) KnockDoor() {
+	devCode := serv.setting.DevCode
+	parent := ""
+	if serv.setting.RouteMode == "client" {
+		sp := strings.Split(devCode, ".")
+		if len(sp) > 1 {
+			for i := 0; i < len(sp)-1; i++ {
+				parent += sp[i] + "."
+			}
+			parent = strings.Trim(parent, ".")
+		}
+	}
+	// 非单机模式，向Broker所在路由敲门
+	if devCode != "" && isUUID(devCode) == false {
 		info := map[string]any{}
-		info["Id"] = serv.setting.DevCode
+		info["Id"] = devCode
 		info["Name"] = serv.setting.DevName
+		info["Parent"] = parent
 		info["Modules"] = []map[string]string{
 			{
 				"Name":    serv.setting.Module,
@@ -167,7 +184,7 @@ func (serv *MicroService) initAdapter() {
 				"Version": serv.setting.Version,
 			},
 		}
-		_, _ = serv.SendRequest(clientModuleName, "KnockDoor", info)
+		_, _ = serv.SendRequest(routeModuleName, "KnockDoor", info)
 	}
 }
 
@@ -268,9 +285,13 @@ func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyC
 }
 
 func (serv *MicroService) onStart() {
+	// 执行外部初始化
 	if serv.setting.onInitHandler != nil {
 		serv.setting.onInitHandler(serv.setting.Module)
 	}
+
+	// 敲门
+	serv.KnockDoor()
 }
 
 func (serv *MicroService) onStop() {

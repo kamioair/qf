@@ -10,18 +10,17 @@ import (
 )
 
 const (
-	routeModuleName  = "Route"
-	clientModuleName = "ClientManager"
+	routeModuleName = "Route"
 )
 
 // Setting 模块配置
 type Setting struct {
-	Root                  bool                  // 是否是根级服务
 	Module                string                // 模块服务名称
 	Desc                  string                // 模块服务描述
 	Version               string                // 模块服务版本
 	DevCode               string                // 设备码
 	DevName               string                // 设备名称
+	RouteMode             string                // 路由模式
 	Broker                qdefine.BrokerConfig  // 主服务配置
 	onInitHandler         qdefine.InitHandler   // 初始化回调
 	onReqHandler          qdefine.ReqHandler    // 请求回调
@@ -61,16 +60,12 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 			configPath = args.ConfigPath
 		}
 	}
-	if devName == "" {
-		cd, _ := DeviceCode.LoadFromFile()
-		devName = cd.Name
-	}
 	// 设置配置文件路径
 	qconfig.ChangeFilePath(configPath)
 	broker := qdefine.BrokerConfig{
 		Addr:    qconfig.Get(module, "mqtt.addr", "ws://127.0.0.1:5002/ws"),
-		UId:     qconfig.Get(module, "mqtt.username", ""),
-		Pwd:     qconfig.Get(module, "mqtt.password", ""),
+		UId:     qconfig.Get(module, "mqtt.uid", ""),
+		Pwd:     qconfig.Get(module, "mqtt.pwd", ""),
 		LogMode: qconfig.Get(module, "mqtt.logMode", "NONE"),
 		TimeOut: qconfig.Get(module, "mqtt.timeOut", 3000),
 		Retry:   qconfig.Get(module, "mqtt.retry", 3),
@@ -80,13 +75,13 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	}
 	// 返回配置
 	return &Setting{
-		Root:    qconfig.Get(module, "root", false),
-		Module:  module,
-		Desc:    moduleDesc,
-		Version: version,
-		Broker:  broker,
-		DevCode: devCode,
-		DevName: devName,
+		Module:    module,
+		Desc:      moduleDesc,
+		RouteMode: qconfig.Get(module, "route.mode", "client"),
+		Version:   version,
+		Broker:    broker,
+		DevCode:   devCode,
+		DevName:   devName,
 	}
 }
 
