@@ -163,12 +163,9 @@ func (serv *MicroService) KnockDoor() {
 	devCode := serv.setting.DevCode
 	parent := ""
 	if serv.setting.RouteMode == "client" {
-		sp := strings.Split(devCode, ".")
+		sp := strings.Split(devCode, "_")
 		if len(sp) > 1 {
-			for i := 0; i < len(sp)-1; i++ {
-				parent += sp[i] + "."
-			}
-			parent = strings.Trim(parent, ".")
+			parent = strings.Join(sp[:len(sp)-1], "_")
 		}
 	}
 	// 非单机模式，向Broker所在路由敲门

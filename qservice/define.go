@@ -73,8 +73,9 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	if mqAddr != "" {
 		broker.Addr = mqAddr
 	}
+
 	// 返回配置
-	return &Setting{
+	setting := &Setting{
 		Module:    module,
 		Desc:      moduleDesc,
 		RouteMode: qconfig.Get(module, "route.mode", "client"),
@@ -83,6 +84,7 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 		DevCode:   devCode,
 		DevName:   devName,
 	}
+	return setting
 }
 
 func (s *Setting) BindInitFunc(onInitHandler qdefine.InitHandler) *Setting {
