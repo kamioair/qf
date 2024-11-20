@@ -18,6 +18,9 @@ import (
 //	@param path 路径
 //	@return bool
 func PathExists(path string) bool {
+	if path == "" {
+		return false
+	}
 	var exist = true
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		exist = false
@@ -145,6 +148,9 @@ func GetFilesByPattern(path string, searchPattern string) ([]string, error) {
 //	@param path 相对路径
 //	@return string
 func GetFullPath(path string) string {
+	if path == "" {
+		return ""
+	}
 	// 将\\转为/
 	full, _ := filepath.Abs(formatPath(path))
 	return full
