@@ -16,9 +16,8 @@ import (
 )
 
 type MicroService struct {
-	adapter       easyCon.IAdapter
-	setting       *Setting
-	retainContent map[string]any
+	adapter easyCon.IAdapter
+	setting *Setting
 }
 
 // NewService 创建服务
@@ -31,8 +30,7 @@ func NewService(setting *Setting) *MicroService {
 
 	// 创建服务
 	serv := &MicroService{
-		setting:       setting,
-		retainContent: make(map[string]any),
+		setting: setting,
 	}
 
 	// 连接
@@ -105,10 +103,26 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 	return nil, errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
 }
 
-// SendNoticeRetain 发送Retain消息
-func (serv *MicroService) SendNoticeRetain(route string, content any) error {
-	serv.retainContent[route] = content
-	return serv.adapter.SendRetainNotice("GlobalRetainNotice", serv.retainContent)
+// SendStatus 发送状态消息
+func (serv *MicroService) SendStatus(route string, content map[string]any) error {
+	arg := map[string]map[string]any{}
+	arg[route] = content
+	resp := serv.adapter.Req(routeModuleName, "StatusInput", arg)
+	if resp.RespCode == easyCon.ERespSuccess {
+		// 返回成功
+		return nil
+	}
+	// 返回异常
+	if resp.RespCode == easyCon.ERespTimeout {
+		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request timeout"))
+	}
+	if resp.RespCode == easyCon.ERespRouteNotFind {
+		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request route not find"))
+	}
+	if resp.RespCode == easyCon.ERespForbidden {
+		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request forbidden"))
+	}
+	return errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
 }
 
 // SendNotice 发送通知
@@ -254,18 +268,19 @@ func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
 		writeErrLog("service.onNotice", err)
 	})
 
-	if notice.Route == "GlobalRetainNotice" {
+	if notice.Route == "GlobalStatusRetain" {
+		content := map[string]any{}
 		str, _ := json.Marshal(notice.Content)
-		_ = json.Unmarshal(str, &serv.retainContent)
+		_ = json.Unmarshal(str, &content)
 
 		// 外置方法
-		if serv.setting.onRetainNoticeHandler != nil {
-			for k, v := range serv.retainContent {
+		if serv.setting.onStatusHandler != nil {
+			for k, v := range content {
 				ctx, err := newContentByData(v)
 				if err != nil {
 					panic(err)
 				}
-				serv.setting.onRetainNoticeHandler(k, ctx)
+				serv.setting.onStatusHandler(k, ctx)
 			}
 		}
 	}
@@ -275,9 +290,9 @@ func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyC
 	//if status == easyCon.EStatusLinkLost {
 	//	adapter.Reset()
 	//}
-	if serv.setting.onStateHandler != nil {
+	if serv.setting.onCommStateHandler != nil {
 		sn := qdefine.ECommState(status)
-		serv.setting.onStateHandler(sn)
+		serv.setting.onCommStateHandler(sn)
 	}
 }
 

@@ -2,11 +2,14 @@ package qservice
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/kamioair/qf/qdefine"
 	"github.com/kamioair/qf/utils/qconfig"
+	"github.com/kamioair/qf/utils/qconvert"
 	"github.com/kamioair/qf/utils/qio"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -15,18 +18,18 @@ const (
 
 // Setting 模块配置
 type Setting struct {
-	Module                string                // 模块服务名称
-	Desc                  string                // 模块服务描述
-	Version               string                // 模块服务版本
-	DevCode               string                // 设备码
-	DevName               string                // 设备名称
-	RouteMode             string                // 路由模式
-	Broker                qdefine.BrokerConfig  // 主服务配置
-	onInitHandler         qdefine.InitHandler   // 初始化回调
-	onReqHandler          qdefine.ReqHandler    // 请求回调
-	onNoticeHandler       qdefine.NoticeHandler // 通知回调
-	onRetainNoticeHandler qdefine.NoticeHandler // Retain通知回调
-	onStateHandler        qdefine.StateHandler  // 状态回调
+	Module             string                // 模块服务名称
+	Desc               string                // 模块服务描述
+	Version            string                // 模块服务版本
+	DevCode            string                // 设备码
+	DevName            string                // 设备名称
+	RouteMode          string                // 路由模式
+	Broker             qdefine.BrokerConfig  // 主服务配置
+	onInitHandler      qdefine.InitHandler   // 初始化回调
+	onReqHandler       qdefine.ReqHandler    // 请求回调
+	onNoticeHandler    qdefine.NoticeHandler // 通知回调
+	onStatusHandler    qdefine.NoticeHandler // 全局状态回调
+	onCommStateHandler qdefine.StateHandler  // 通讯状态回调
 }
 
 // NewSetting 创建模块配置
@@ -73,7 +76,11 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	if mqAddr != "" {
 		broker.Addr = mqAddr
 	}
-
+	if devName == "" {
+		if dev, err := DeviceCode.LoadFromFile(); err == nil {
+			devName = dev.Name
+		}
+	}
 	// 返回配置
 	setting := &Setting{
 		Module:    module,
@@ -102,13 +109,13 @@ func (s *Setting) BindNoticeFunc(onNoticeHandler qdefine.NoticeHandler) *Setting
 	return s
 }
 
-func (s *Setting) BindRetainNoticeFunc(onRetainNoticeHandler qdefine.NoticeHandler) *Setting {
-	s.onRetainNoticeHandler = onRetainNoticeHandler
+func (s *Setting) BindStatusFunc(onRetainNoticeHandler qdefine.NoticeHandler) *Setting {
+	s.onStatusHandler = onRetainNoticeHandler
 	return s
 }
 
-func (s *Setting) BindStateFunc(onStateHandler qdefine.StateHandler) *Setting {
-	s.onStateHandler = onStateHandler
+func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Setting {
+	s.onCommStateHandler = onStateHandler
 	return s
 }
 
@@ -137,5 +144,13 @@ func newModuleName(module, code string) string {
 }
 
 func writeErrLog(tp string, err string) {
-
+	logStr := fmt.Sprintf("DateTime: %s\n", qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss"))
+	logStr += fmt.Sprintf("From: %s\n", tp)
+	logStr += fmt.Sprintf("Error: %s\n", err)
+	logStr += "----------------------------------------------------------------------------------------------\n\n"
+	per := qconvert.DateTime.ToString(time.Now(), "yyyy-MM")
+	day := qconvert.DateTime.ToString(time.Now(), "dd")
+	logFile := fmt.Sprintf("./log/%s/%s_%s.log", per, day, "Error")
+	logFile = qio.GetFullPath(logFile)
+	_ = qio.WriteString(logFile, logStr, true)
 }

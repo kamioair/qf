@@ -1,8 +1,8 @@
 package qio
 
 import (
+	"bufio"
 	"errors"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -299,31 +299,59 @@ func ReadAllBytes(filename string) ([]byte, error) {
 //	@param bytes
 //	@param isAppend
 //	@return error
-func WriteAllBytes(filename string, bytes []byte, isAppend bool) error {
+func WriteAllBytes(filename string, content []byte, isAppend bool) error {
 	f, err := readyToWrite(filename, isAppend)
 	if err != nil || f == nil {
 		return err
 	}
 	defer f.Close()
-	_, err = f.Write(bytes)
-	return err
+
+	// 创建一个写入器
+	writer := bufio.NewWriter(f)
+
+	// 写入内容到文件
+	_, err = writer.WriteString(string(content))
+	if err != nil {
+		return err
+	}
+
+	// 刷新缓冲区，确保所有数据都写入文件
+	err = writer.Flush()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // WriteString
 //
 //	@Description: 写入字符串，如果文件不存在则创建
 //	@param filename
-//	@param str
+//	@param content
 //	@param isAppend
 //	@return error
-func WriteString(filename string, str string, isAppend bool) error {
+func WriteString(filename string, content string, isAppend bool) error {
 	f, err := readyToWrite(filename, isAppend)
 	if err != nil || f == nil {
 		return err
 	}
 	defer f.Close()
-	_, err = io.WriteString(f, str) //写入文件(字符串)
-	return err
+
+	// 创建一个写入器
+	writer := bufio.NewWriter(f)
+
+	// 写入内容到文件
+	_, err = writer.WriteString(content)
+	if err != nil {
+		return err
+	}
+
+	// 刷新缓冲区，确保所有数据都写入文件
+	err = writer.Flush()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func readyToWrite(filename string, isAppend bool) (f *os.File, e error) {
