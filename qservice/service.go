@@ -16,8 +16,9 @@ import (
 )
 
 type MicroService struct {
-	adapter easyCon.IAdapter
-	setting *Setting
+	adapter       easyCon.IAdapter
+	setting       *Setting
+	reqDeviceDict map[string]string
 }
 
 // NewService 创建服务
@@ -30,7 +31,8 @@ func NewService(setting *Setting) *MicroService {
 
 	// 创建服务
 	serv := &MicroService{
-		setting: setting,
+		setting:       setting,
+		reqDeviceDict: map[string]string{},
 	}
 
 	// 连接
@@ -63,14 +65,6 @@ func (serv *MicroService) ResetClient(devCode string) {
 	serv.KnockDoor()
 }
 
-func (serv *MicroService) newModuleName(module, code string) string {
-	if strings.Contains(module, ".") {
-		return module
-	}
-	str := module + "." + code
-	return strings.Trim(str, ".")
-}
-
 // SendRequest 向服务器其他模块发送请求，单机两者效果一致
 func (serv *MicroService) SendRequest(module, route string, params any) (qdefine.Context, error) {
 	var resp easyCon.PackResp
@@ -83,8 +77,13 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 		newParams["Content"] = params
 		resp = serv.adapter.Req(routeModuleName, "Request", newParams)
 	} else {
-		// 常规请求
-		resp = serv.adapter.Req(module, route, params)
+		// 常规请求，先从服务请求设备列表，发送模块请求是附带设备ID
+		// 如果没有则全部请求到本电脑的模块
+		devCode := serv.setting.DevCode
+		if code, ok := serv.reqDeviceDict[module]; ok {
+			devCode = code
+		}
+		resp = serv.adapter.Req(newModuleName(module, devCode), route, params)
 	}
 	if resp.RespCode == easyCon.ERespSuccess {
 		// 返回成功
@@ -148,12 +147,12 @@ func (serv *MicroService) SendLog(logType qdefine.ELog, content string, err erro
 }
 
 func (serv *MicroService) initAdapter() {
-	// 先停止
+	// 如果之前连接了，则先停止
 	if serv.adapter != nil {
 		serv.adapter.Stop()
 		serv.adapter = nil
 	}
-	// 重新创建连接
+	// 创建连接
 	devCode := ""
 	if serv.setting.RouteMode == "client" {
 		devCode = serv.setting.DevCode
@@ -171,6 +170,24 @@ func (serv *MicroService) initAdapter() {
 
 	// 等待确保连接成功
 	time.Sleep(time.Second)
+
+	// 问主路由模块请求服务器的模块列表和本机的所有模块列表
+	serv.loadServDevices()
+}
+
+func (serv *MicroService) loadServDevices() {
+	if serv.setting.DevCode == "" {
+		return
+	}
+	resp := serv.adapter.Req(routeModuleName, "LoadServDevices", serv.setting.DevCode)
+	if resp.RespCode == easyCon.ERespSuccess {
+		err := json.Unmarshal(resp.Content.([]byte), &serv.reqDeviceDict)
+		if err != nil {
+			writeErrLog("service.loadServDevices json error", err.Error())
+		}
+	} else {
+		writeErrLog("service.loadServDevices req error", fmt.Sprintf("%s,%s", resp.RespCode, resp.Error))
+	}
 }
 
 func (serv *MicroService) KnockDoor() {
@@ -311,6 +328,14 @@ func (serv *MicroService) onStop() {
 		serv.adapter.Stop()
 		serv.adapter = nil
 	}
+}
+
+func (serv *MicroService) newModuleName(module, code string) string {
+	if strings.Contains(module, ".") {
+		return module
+	}
+	str := module + "." + code
+	return strings.Trim(str, ".")
 }
 
 func isUUID(uuid string) bool {
