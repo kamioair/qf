@@ -8,7 +8,6 @@ import (
 	"github.com/kamioair/qf/utils/qconvert"
 	"github.com/kamioair/qf/utils/qio"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -23,8 +22,8 @@ type Setting struct {
 	Version            string                // 模块服务版本
 	DevCode            string                // 设备码
 	DevName            string                // 设备名称
-	RouteMode          string                // 路由模式
 	Broker             qdefine.BrokerConfig  // 主服务配置
+	isAddModuleSuffix  bool                  // 模块是否附加设备id后缀
 	onInitHandler      qdefine.InitHandler   // 初始化回调
 	onReqHandler       qdefine.ReqHandler    // 请求回调
 	onNoticeHandler    qdefine.NoticeHandler // 通知回调
@@ -83,13 +82,12 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	}
 	// 返回配置
 	setting := &Setting{
-		Module:    module,
-		Desc:      moduleDesc,
-		RouteMode: qconfig.Get(module, "route.mode", "client"),
-		Version:   version,
-		Broker:    broker,
-		DevCode:   devCode,
-		DevName:   devName,
+		Module:  module,
+		Desc:    moduleDesc,
+		Version: version,
+		Broker:  broker,
+		DevCode: devCode,
+		DevName: devName,
 	}
 	return setting
 }
@@ -119,8 +117,9 @@ func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Settin
 	return s
 }
 
-func (s *Setting) SetDeviceCode(devCode string) *Setting {
+func (s *Setting) SetDeviceCode(devCode string, isAddModuleSuffix bool) *Setting {
 	s.DevCode = devCode
+	s.isAddModuleSuffix = isAddModuleSuffix
 	return s
 }
 
@@ -130,17 +129,6 @@ type args struct {
 	DeviceName string
 	ConfigPath string
 	MqAddr     string
-}
-
-func newModuleName(module, code string) string {
-	sp := strings.Split(module, ".")
-	if len(sp) >= 2 {
-		module = sp[0] + "." + code
-	} else {
-		module = module + "." + code
-	}
-	module = strings.Trim(module, ".")
-	return module
 }
 
 func writeErrLog(tp string, err string) {
