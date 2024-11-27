@@ -85,7 +85,12 @@ func setData(ctx *context, data any) error {
 		switch data.(type) {
 		case string:
 			str := data.(string)
-			content = []byte(fmt.Sprintf("\"%s\"", str))
+			if (strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}")) ||
+				strings.HasPrefix(str, "[") && strings.HasSuffix(str, "]") {
+				content = []byte(str)
+			} else {
+				content = []byte(fmt.Sprintf("\"%s\"", str))
+			}
 		default:
 			js, err := json.Marshal(data)
 			if err != nil {
@@ -226,7 +231,16 @@ func (d *values) load(content []byte) error {
 	kind := reflect.TypeOf(obj).Kind()
 	if kind == reflect.Slice {
 		for _, o := range obj.([]interface{}) {
-			maps = append(maps, o.(map[string]interface{}))
+			//maps = append(maps, o.(map[string]interface{}))
+			if m, ok := o.(map[string]interface{}); ok {
+				maps = append(maps, m)
+			} else {
+				if len(maps) == 0 {
+					maps = append(maps, map[string]interface{}{"": []any{o}})
+				} else {
+					maps[0][""] = append(maps[0][""].([]any), o)
+				}
+			}
 		}
 	} else if kind == reflect.Map || kind == reflect.Struct {
 		maps = append(maps, obj.(map[string]interface{}))

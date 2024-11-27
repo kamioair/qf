@@ -82,6 +82,9 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 		if code, ok := serv.reqDeviceDict[module]; ok {
 			devCode = code
 		}
+		if module == routeModuleName && route == "KnockDoor" {
+			devCode = ""
+		}
 		resp = serv.adapter.Req(serv.newModuleName(module, devCode), route, params)
 	}
 	if resp.RespCode == easyCon.ERespSuccess {
@@ -189,7 +192,8 @@ func (serv *MicroService) loadServModules() {
 	}
 	resp := serv.adapter.Req(routeModuleName, "ModuleList", wheres)
 	if resp.RespCode == easyCon.ERespSuccess {
-		err := json.Unmarshal(resp.Content.([]byte), &serv.reqDeviceDict)
+		str, _ := json.Marshal(resp.Content)
+		err := json.Unmarshal(str, &serv.reqDeviceDict)
 		if err != nil {
 			writeErrLog("service.loadServModules json error", err.Error())
 		}
@@ -249,6 +253,9 @@ func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp 
 		return easyCon.ERespSuccess, nil
 	}
 	if serv.setting.onReqHandler != nil {
+		if pack.Route == "UploadDeviceState" {
+			fmt.Println("")
+		}
 		ctx, err1 := newContentByReq(pack)
 		if err1 != nil {
 			return easyCon.ERespError, err1.Error()
