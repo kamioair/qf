@@ -192,7 +192,7 @@ func (c *context) GetFiles(key string) []qdefine.File {
 	return nil
 }
 
-func (c *context) GetStruct(refStruct any) {
+func (c *context) GetStruct(key string, refStruct any) {
 	var val any
 
 	t := reflect.ValueOf(refStruct)
@@ -202,7 +202,7 @@ func (c *context) GetStruct(refStruct any) {
 	if t.Kind() == reflect.Slice {
 		val = c.values.InputMaps
 	} else {
-		val = c.values.getValue("")
+		val = c.values.getValue(key)
 	}
 
 	// 先转为json

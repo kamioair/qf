@@ -19,7 +19,7 @@ type Context interface {
 	GetDate(key string) Date
 	GetDateTime(key string) DateTime
 	GetFiles(key string) []File
-	GetStruct(refStruct any)
+	GetStruct(key string, refStruct any)
 	Raw() any
 }
 

@@ -23,6 +23,7 @@ type Setting struct {
 	DevCode            string                // 设备码
 	DevName            string                // 设备名称
 	Broker             qdefine.BrokerConfig  // 主服务配置
+	isServerModule     bool                  // 是否是服务端模块
 	isAddModuleSuffix  bool                  // 模块是否附加设备id后缀
 	onInitHandler      qdefine.InitHandler   // 初始化回调
 	onReqHandler       qdefine.ReqHandler    // 请求回调
@@ -129,6 +130,17 @@ type args struct {
 	DeviceName string
 	ConfigPath string
 	MqAddr     string
+}
+
+type servDiscovery struct {
+	Id      string            // 服务器Broker所在设备ID
+	Modules map[string]string // 包含的服务器模块和请求设备的模块列表，key为模块名称，value为设备Id，用于请求设备查找请求模块所在的设备
+}
+
+type runLog struct {
+	Id      string // 来至设备ID
+	Module  string // 来至模块ID
+	Content string // 日志内容
 }
 
 func writeErrLog(tp string, err string) {

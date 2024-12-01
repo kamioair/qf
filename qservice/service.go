@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kamioair/qf/qdefine"
-	"github.com/kamioair/qf/utils/qconvert"
 	"github.com/kamioair/qf/utils/qio"
 	"github.com/kamioair/qf/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
@@ -18,8 +17,8 @@ import (
 type MicroService struct {
 	adapter       easyCon.IAdapter
 	setting       *Setting
-	reqDeviceDict map[string]string
-	parentDevId   string
+	servDiscovery servDiscovery
+	initOk        bool
 }
 
 // NewService 创建服务
@@ -33,7 +32,7 @@ func NewService(setting *Setting) *MicroService {
 	// 创建服务
 	serv := &MicroService{
 		setting:       setting,
-		reqDeviceDict: map[string]string{},
+		servDiscovery: servDiscovery{},
 	}
 
 	// 连接
@@ -76,16 +75,18 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 		newParams["Content"] = params
 		resp = serv.adapter.Req(routeModuleName, "Request", newParams)
 	} else {
-		// 常规请求，先从服务请求设备列表，发送模块请求是附带设备ID
-		// 如果没有则全部请求到本电脑的模块
-		devCode := serv.setting.DevCode
-		if code, ok := serv.reqDeviceDict[module]; ok {
-			devCode = code
+		// 常规请求
+		if serv.setting.isServerModule && module == routeModuleName {
+			// 服务端模块直接请求根路由模块
+			resp = serv.adapter.Req(routeModuleName, route, params)
+		} else {
+			// 查找模块所在设备ID
+			devCode := serv.setting.DevCode
+			if code, ok := serv.servDiscovery.Modules[module]; ok {
+				devCode = code
+			}
+			resp = serv.adapter.Req(serv.newModuleName(module, devCode), route, params)
 		}
-		if module == routeModuleName && route == "KnockDoor" {
-			devCode = ""
-		}
-		resp = serv.adapter.Req(serv.newModuleName(module, devCode), route, params)
 	}
 	if resp.RespCode == easyCon.ERespSuccess {
 		// 返回成功
@@ -136,27 +137,19 @@ func (serv *MicroService) SendNotice(route string, content any) {
 
 // SendLog 发送日志
 func (serv *MicroService) SendLog(logType qdefine.ELog, content string, err error) {
+	log := runLog{
+		Id:      serv.setting.DevCode,
+		Module:  serv.setting.Module,
+		Content: content,
+	}
+	js, _ := json.Marshal(log)
 	switch logType {
 	case qdefine.ELogError:
-		serv.adapter.Err(content, err)
-		// 向本机路由发送错误
-		log := map[string]string{
-			"id":    fmt.Sprintf("%s^%s", serv.setting.DevCode, serv.setting.Module),
-			"time":  qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss"),
-			"title": content,
-			"error": err.Error(),
-		}
-		code := ""
-		if serv.setting.DevCode != serv.parentDevId {
-			code = serv.setting.DevCode
-		}
-		go serv.adapter.Req(serv.newModuleName(routeModuleName, code), "ErrorLog", log)
+		serv.adapter.Err(string(js), err)
 	case qdefine.ELogWarn:
-		serv.adapter.Warn(content)
+		serv.adapter.Warn(string(js))
 	case qdefine.ELogDebug:
-		serv.adapter.Debug(content)
-	default:
-		serv.adapter.Debug(content)
+		serv.adapter.Debug(string(js))
 	}
 }
 
@@ -182,45 +175,37 @@ func (serv *MicroService) initAdapter() {
 	time.Sleep(time.Second)
 }
 
-func (serv *MicroService) loadServModules() {
-	if serv.setting.isAddModuleSuffix == false {
-		return
-	}
-	wheres := []string{
-		"local",
-		serv.setting.DevCode,
-	}
-	resp := serv.adapter.Req(routeModuleName, "ModuleList", wheres)
+func (serv *MicroService) loadServDiscoveryList() {
+	resp := serv.adapter.Req(routeModuleName, "DiscoveryList", []string{"local", serv.setting.DevCode})
 	if resp.RespCode == easyCon.ERespSuccess {
 		str, _ := json.Marshal(resp.Content)
-		err := json.Unmarshal(str, &serv.reqDeviceDict)
+		err := json.Unmarshal(str, &serv.servDiscovery)
 		if err != nil {
-			writeErrLog("service.loadServModules json error", err.Error())
+			writeErrLog("service.loadServDiscoveryList json error", err.Error())
+			return
 		}
 	} else {
-		writeErrLog("service.loadServModules req error", fmt.Sprintf("%s,%s", resp.RespCode, resp.Error))
+		writeErrLog("service.loadServDiscoveryList req error", fmt.Sprintf("%s,%s", resp.RespCode, resp.Error))
+		return
+	}
+
+	// 判断是否是与服务端在同一级
+	device, _ := DeviceCode.LoadFromFile()
+	if serv.servDiscovery.Id == device.Id {
+		serv.setting.isServerModule = true
 	}
 }
 
 func (serv *MicroService) KnockDoor() {
 	// 问主路由模块请求服务器的模块列表和本机的所有模块列表
-	serv.loadServModules()
-
-	// 问上级路由要父级ID
-	if serv.parentDevId == "" {
-		resp := serv.adapter.Req(routeModuleName, "ServerDevId", nil)
-		if resp.RespCode == easyCon.ERespSuccess {
-			serv.parentDevId = resp.Content.(string)
-		}
-	}
+	serv.loadServDiscoveryList()
 
 	// 非单机模式，向Broker所在路由敲门
-	devCode := serv.setting.DevCode
-	if devCode != "" && strings.HasSuffix(devCode, "[TEMP]") == false {
+	if serv.setting.DevCode != "" && strings.HasSuffix(serv.setting.DevCode, "[TEMP]") == false {
 		info := map[string]any{}
-		info["Id"] = devCode
+		info["Id"] = serv.setting.DevCode
 		info["Name"] = serv.setting.DevName
-		info["Parent"] = serv.parentDevId
+		info["Parent"] = serv.servDiscovery.Id
 		info["Modules"] = []map[string]string{
 			{
 				"Name":    serv.setting.Module,
@@ -228,7 +213,12 @@ func (serv *MicroService) KnockDoor() {
 				"Version": serv.setting.Version,
 			},
 		}
-		_, _ = serv.SendRequest(routeModuleName, "KnockDoor", info)
+		// 向同级路由模块发送敲门
+		devCode := serv.setting.DevCode
+		if code, ok := serv.servDiscovery.Modules[routeModuleName]; ok {
+			devCode = code
+		}
+		_, _ = serv.SendRequest(serv.newModuleName(routeModuleName, devCode), "KnockDoor", info)
 	}
 }
 
@@ -253,9 +243,6 @@ func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp 
 		return easyCon.ERespSuccess, nil
 	}
 	if serv.setting.onReqHandler != nil {
-		if pack.Route == "UploadDeviceState" {
-			fmt.Println("")
-		}
 		ctx, err1 := newContentByReq(pack)
 		if err1 != nil {
 			return easyCon.ERespError, err1.Error()
@@ -323,9 +310,12 @@ func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
 }
 
 func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyCon.EStatus) {
-	//if status == easyCon.EStatusLinkLost {
-	//	adapter.Reset()
-	//}
+	if status == easyCon.EStatusLinked {
+		// 敲门
+		if serv.initOk == true {
+			serv.KnockDoor()
+		}
+	}
 	if serv.setting.onCommStateHandler != nil {
 		sn := qdefine.ECommState(status)
 		serv.setting.onCommStateHandler(sn)
@@ -333,16 +323,14 @@ func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyC
 }
 
 func (serv *MicroService) onStart() {
+	serv.KnockDoor()
+
 	// 执行外部初始化
 	if serv.setting.onInitHandler != nil {
 		serv.setting.onInitHandler(serv.setting.Module)
 	}
 
-	// 敲门
-	serv.KnockDoor()
-
-	// 发送心跳
-	go serv.heart()
+	serv.initOk = true
 }
 
 func (serv *MicroService) onStop() {
@@ -363,27 +351,4 @@ func (serv *MicroService) newModuleName(module, code string) string {
 	}
 	module = strings.Trim(module, ".")
 	return module
-}
-
-func (serv *MicroService) heart() {
-	if serv.setting.Module == routeModuleName {
-		// 路由模块不用统一发心跳，由路由模块自己管理
-		return
-	}
-
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			// 除了路由模块外，其他模块向本设备的路由模块发送心跳
-			// 路由模块向上级路由模块发送心跳
-			code := ""
-			if serv.setting.DevCode != serv.parentDevId && serv.setting.Module != routeModuleName {
-				code = serv.setting.DevCode
-			}
-			go serv.adapter.Req(serv.newModuleName(routeModuleName, code), "Heart", fmt.Sprintf("%s^%s", serv.setting.DevCode, serv.setting.Module))
-		}
-	}
 }
