@@ -76,15 +76,16 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 		resp = serv.adapter.Req(routeModuleName, "Request", newParams)
 	} else {
 		// 常规请求
-		if serv.setting.isServerModule && module == routeModuleName {
-			// 服务端模块直接请求根路由模块
-			resp = serv.adapter.Req(routeModuleName, route, params)
+		if strings.HasSuffix(module, ".root") {
+			// 强制不附加设备ID
+			resp = serv.adapter.Req(strings.Replace(module, ".root", "", -1), route, params)
 		} else {
 			// 查找模块所在设备ID
 			devCode := serv.setting.DevCode
 			if code, ok := serv.servDiscovery.Modules[module]; ok {
 				devCode = code
 			}
+			fmt.Println("【SendRequest】", "To", serv.newModuleName(module, devCode), route)
 			resp = serv.adapter.Req(serv.newModuleName(module, devCode), route, params)
 		}
 	}
@@ -175,30 +176,33 @@ func (serv *MicroService) initAdapter() {
 	time.Sleep(time.Second)
 }
 
-func (serv *MicroService) loadServDiscoveryList() {
-	resp := serv.adapter.Req(routeModuleName, "DiscoveryList", []string{"local", serv.setting.DevCode})
-	if resp.RespCode == easyCon.ERespSuccess {
-		str, _ := json.Marshal(resp.Content)
-		err := json.Unmarshal(str, &serv.servDiscovery)
-		if err != nil {
-			writeErrLog("service.loadServDiscoveryList json error", err.Error())
-			return
-		}
-	} else {
-		writeErrLog("service.loadServDiscoveryList req error", fmt.Sprintf("%s,%s", resp.RespCode, resp.Error))
-		return
-	}
-
-	// 判断是否是与服务端在同一级
-	device, _ := DeviceCode.LoadFromFile()
-	if serv.servDiscovery.Id == device.Id {
-		serv.setting.isServerModule = true
-	}
-}
+//func (serv *MicroService) loadServDiscoveryList() {
+//	resp := serv.adapter.Req(routeModuleName, "DiscoveryList", []string{"local", serv.setting.DevCode})
+//	if resp.RespCode == easyCon.ERespSuccess {
+//		str, _ := json.Marshal(resp.Content)
+//		err := json.Unmarshal(str, &serv.servDiscovery)
+//		fmt.Println("【LoadServDiscoveryList】", serv.servDiscovery)
+//		if err != nil {
+//			writeErrLog("service.loadServDiscoveryList json error", err.Error())
+//			return
+//		}
+//	} else {
+//		writeErrLog("service.loadServDiscoveryList req error", fmt.Sprintf("%s,%s", resp.RespCode, resp.Error))
+//		return
+//	}
+//}
 
 func (serv *MicroService) KnockDoor() {
 	// 问主路由模块请求服务器的模块列表和本机的所有模块列表
-	serv.loadServDiscoveryList()
+	//serv.loadServDiscoveryList()
+	if serv.setting.onLoadServDiscoveryList != nil {
+		str := serv.setting.onLoadServDiscoveryList()
+		err := json.Unmarshal([]byte(str), &serv.servDiscovery)
+		if err != nil {
+			writeErrLog("KnockDoor.loadServDiscoveryList json error", err.Error())
+			return
+		}
+	}
 
 	// 非单机模式，向Broker所在路由敲门
 	if serv.setting.DevCode != "" && strings.HasSuffix(serv.setting.DevCode, "[TEMP]") == false {
@@ -206,6 +210,7 @@ func (serv *MicroService) KnockDoor() {
 		info["Id"] = serv.setting.DevCode
 		info["Name"] = serv.setting.DevName
 		info["Parent"] = serv.servDiscovery.Id
+		fmt.Println("【SetParentId】", serv.servDiscovery.Id)
 		info["Modules"] = []map[string]string{
 			{
 				"Name":    serv.setting.Module,
@@ -311,7 +316,7 @@ func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
 
 func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyCon.EStatus) {
 	if status == easyCon.EStatusLinked {
-		// 敲门
+		// 断线重连后，再次敲门
 		if serv.initOk == true {
 			serv.KnockDoor()
 		}
@@ -323,13 +328,12 @@ func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyC
 }
 
 func (serv *MicroService) onStart() {
-	serv.KnockDoor()
-
 	// 执行外部初始化
 	if serv.setting.onInitHandler != nil {
 		serv.setting.onInitHandler(serv.setting.Module)
 	}
 
+	serv.KnockDoor()
 	serv.initOk = true
 }
 

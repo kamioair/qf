@@ -17,19 +17,19 @@ const (
 
 // Setting 模块配置
 type Setting struct {
-	Module             string                // 模块服务名称
-	Desc               string                // 模块服务描述
-	Version            string                // 模块服务版本
-	DevCode            string                // 设备码
-	DevName            string                // 设备名称
-	Broker             qdefine.BrokerConfig  // 主服务配置
-	isServerModule     bool                  // 是否是服务端模块
-	isAddModuleSuffix  bool                  // 模块是否附加设备id后缀
-	onInitHandler      qdefine.InitHandler   // 初始化回调
-	onReqHandler       qdefine.ReqHandler    // 请求回调
-	onNoticeHandler    qdefine.NoticeHandler // 通知回调
-	onStatusHandler    qdefine.NoticeHandler // 全局状态回调
-	onCommStateHandler qdefine.StateHandler  // 通讯状态回调
+	Module                  string                // 模块服务名称
+	Desc                    string                // 模块服务描述
+	Version                 string                // 模块服务版本
+	DevCode                 string                // 设备码
+	DevName                 string                // 设备名称
+	Broker                  qdefine.BrokerConfig  // 主服务配置
+	isAddModuleSuffix       bool                  // 模块是否附加设备id后缀
+	onInitHandler           qdefine.InitHandler   // 初始化回调
+	onReqHandler            qdefine.ReqHandler    // 请求回调
+	onNoticeHandler         qdefine.NoticeHandler // 通知回调
+	onStatusHandler         qdefine.NoticeHandler // 全局状态回调
+	onCommStateHandler      qdefine.StateHandler  // 通讯状态回调
+	onLoadServDiscoveryList func() string
 }
 
 // NewSetting 创建模块配置
@@ -115,6 +115,11 @@ func (s *Setting) BindStatusFunc(onRetainNoticeHandler qdefine.NoticeHandler) *S
 
 func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Setting {
 	s.onCommStateHandler = onStateHandler
+	return s
+}
+
+func (s *Setting) BindLoadServDiscoveryList(handler func() string) *Setting {
+	s.onLoadServDiscoveryList = handler
 	return s
 }
 
