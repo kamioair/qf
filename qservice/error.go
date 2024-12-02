@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+var errorLogPath = "./log"
+
 // Recover
 //
 //	@Description: Panic的异常收集
@@ -57,6 +59,18 @@ func errRecover(after func(err string)) {
 			after(fmt.Sprintf("%s", r))
 		}
 	}
+}
+
+func writeErrLog(tp string, err string) {
+	logStr := fmt.Sprintf("DateTime: %s\n", qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss"))
+	logStr += fmt.Sprintf("From: %s\n", tp)
+	logStr += fmt.Sprintf("Error: %s\n", err)
+	logStr += "----------------------------------------------------------------------------------------------\n\n"
+	per := qconvert.DateTime.ToString(time.Now(), "yyyy-MM")
+	day := qconvert.DateTime.ToString(time.Now(), "dd")
+	logFile := fmt.Sprintf("%s/%s/%s_%s.log", errorLogPath, per, day, "Error")
+	logFile = qio.GetFullPath(logFile)
+	_ = qio.WriteString(logFile, logStr, true)
 }
 
 func formatStack(flag, name string, row string) string {

@@ -2,34 +2,45 @@ package qservice
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/kamioair/qf/qdefine"
 	"github.com/kamioair/qf/utils/qconfig"
-	"github.com/kamioair/qf/utils/qconvert"
 	"github.com/kamioair/qf/utils/qio"
 	"os"
-	"time"
 )
 
 const (
 	routeModuleName = "Route"
 )
 
+type EServerMode string
+
+func (mode EServerMode) IsClient() bool {
+	return mode == EModeClient
+}
+
+func (mode EServerMode) IsServer() bool {
+	return mode == EModeServer
+}
+
+const (
+	EModeClient EServerMode = "client"
+	EModeServer EServerMode = "server"
+)
+
 // Setting 模块配置
 type Setting struct {
-	Module                  string                // 模块服务名称
-	Desc                    string                // 模块服务描述
-	Version                 string                // 模块服务版本
-	DevCode                 string                // 设备码
-	DevName                 string                // 设备名称
-	Broker                  qdefine.BrokerConfig  // 主服务配置
-	isAddModuleSuffix       bool                  // 模块是否附加设备id后缀
-	onInitHandler           qdefine.InitHandler   // 初始化回调
-	onReqHandler            qdefine.ReqHandler    // 请求回调
-	onNoticeHandler         qdefine.NoticeHandler // 通知回调
-	onStatusHandler         qdefine.NoticeHandler // 全局状态回调
-	onCommStateHandler      qdefine.StateHandler  // 通讯状态回调
-	onLoadServDiscoveryList func() string
+	Mode    EServerMode          // 路由模式
+	Module  string               // 模块服务名称
+	Desc    string               // 模块服务描述
+	Version string               // 模块服务版本
+	DevCode string               // 设备码
+	Broker  qdefine.BrokerConfig // 主服务配置
+
+	onInitHandler      qdefine.InitHandler   // 初始化回调
+	onReqHandler       qdefine.ReqHandler    // 请求回调
+	onNoticeHandler    qdefine.NoticeHandler // 通知回调
+	onStatusHandler    qdefine.NoticeHandler // 全局状态回调
+	onCommStateHandler qdefine.StateHandler  // 通讯状态回调
 }
 
 // NewSetting 创建模块配置
@@ -42,9 +53,9 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 
 	// 默认值
 	configPath := "./config/config.yaml"
+	errorLogPath = "./log"
 	module := moduleName
 	devCode := ""
-	devName := ""
 	mqAddr := ""
 	// 根据传参更新配置
 	if len(os.Args) > 1 {
@@ -55,12 +66,14 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 		}
 		mqAddr = args.MqAddr
 		devCode = args.DeviceCode
-		devName = args.DeviceName
 		if args.Module != "" {
 			module = args.Module
 		}
 		if args.ConfigPath != "" {
 			configPath = args.ConfigPath
+		}
+		if args.LogPath != "" {
+			errorLogPath = args.LogPath
 		}
 	}
 	// 设置配置文件路径
@@ -76,19 +89,14 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	if mqAddr != "" {
 		broker.Addr = mqAddr
 	}
-	if devName == "" {
-		if dev, err := DeviceCode.LoadFromFile(); err == nil {
-			devName = dev.Name
-		}
-	}
 	// 返回配置
 	setting := &Setting{
+		Mode:    EServerMode(qconfig.Get(module, "mode", "client")),
 		Module:  module,
 		Desc:    moduleDesc,
 		Version: version,
 		Broker:  broker,
 		DevCode: devCode,
-		DevName: devName,
 	}
 	return setting
 }
@@ -118,22 +126,12 @@ func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Settin
 	return s
 }
 
-func (s *Setting) BindLoadServDiscoveryList(handler func() string) *Setting {
-	s.onLoadServDiscoveryList = handler
-	return s
-}
-
-func (s *Setting) SetDeviceCode(devCode string, isAddModuleSuffix bool) *Setting {
-	s.DevCode = devCode
-	s.isAddModuleSuffix = isAddModuleSuffix
-	return s
-}
-
 type args struct {
 	Module     string
 	DeviceCode string
 	DeviceName string
 	ConfigPath string
+	LogPath    string
 	MqAddr     string
 }
 
@@ -146,16 +144,4 @@ type runLog struct {
 	Id      string // 来至设备ID
 	Module  string // 来至模块ID
 	Content string // 日志内容
-}
-
-func writeErrLog(tp string, err string) {
-	logStr := fmt.Sprintf("DateTime: %s\n", qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss"))
-	logStr += fmt.Sprintf("From: %s\n", tp)
-	logStr += fmt.Sprintf("Error: %s\n", err)
-	logStr += "----------------------------------------------------------------------------------------------\n\n"
-	per := qconvert.DateTime.ToString(time.Now(), "yyyy-MM")
-	day := qconvert.DateTime.ToString(time.Now(), "dd")
-	logFile := fmt.Sprintf("./log/%s/%s_%s.log", per, day, "Error")
-	logFile = qio.GetFullPath(logFile)
-	_ = qio.WriteString(logFile, logStr, true)
 }

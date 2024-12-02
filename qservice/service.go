@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kamioair/qf/qdefine"
+	"github.com/kamioair/qf/utils/qconvert"
 	"github.com/kamioair/qf/utils/qio"
 	"github.com/kamioair/qf/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
@@ -17,7 +18,7 @@ import (
 type MicroService struct {
 	adapter       easyCon.IAdapter
 	setting       *Setting
-	servDiscovery servDiscovery
+	brokerModules map[string]string
 	initOk        bool
 }
 
@@ -32,7 +33,7 @@ func NewService(setting *Setting) *MicroService {
 	// 创建服务
 	serv := &MicroService{
 		setting:       setting,
-		servDiscovery: servDiscovery{},
+		brokerModules: map[string]string{},
 	}
 
 	// 连接
@@ -46,8 +47,10 @@ func (serv *MicroService) Run() {
 	qlauncher.Run(serv.onStart, serv.onStop)
 }
 
+// Setting 获取设置
 func (serv *MicroService) Setting() Setting {
 	return Setting{
+		Mode:    serv.setting.Mode,
 		Module:  serv.setting.Module,
 		Desc:    serv.setting.Desc,
 		Version: serv.setting.Version,
@@ -56,9 +59,13 @@ func (serv *MicroService) Setting() Setting {
 	}
 }
 
+// Adapter 获取访问器
+func (serv *MicroService) Adapter() easyCon.IAdapter {
+	return serv.adapter
+}
+
 // ResetClient 重置客户端
-func (serv *MicroService) ResetClient(devCode string, isAddModuleSuffix bool) {
-	serv.setting.SetDeviceCode(devCode, isAddModuleSuffix)
+func (serv *MicroService) ResetClient() {
 	// 重新创建服务
 	serv.initAdapter()
 }
@@ -75,19 +82,15 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 		newParams["Content"] = params
 		resp = serv.adapter.Req(routeModuleName, "Request", newParams)
 	} else {
-		// 常规请求
-		if strings.HasSuffix(module, ".root") {
-			// 强制不附加设备ID
-			resp = serv.adapter.Req(strings.Replace(module, ".root", "", -1), route, params)
-		} else {
-			// 查找模块所在设备ID
-			devCode := serv.setting.DevCode
-			if code, ok := serv.servDiscovery.Modules[module]; ok {
-				devCode = code
-			}
-			fmt.Println("【SendRequest】", "To", serv.newModuleName(module, devCode), route)
-			resp = serv.adapter.Req(serv.newModuleName(module, devCode), route, params)
+		// 常规请求，查找请求模块所在设备ID
+		devCode := serv.setting.DevCode
+		if code, ok := serv.brokerModules[module]; ok {
+			devCode = code
 		}
+		if module == routeModuleName && serv.setting.Mode.IsServer() {
+			devCode = ""
+		}
+		resp = serv.adapter.Req(serv.newModuleName(module, devCode), route, params)
 	}
 	if resp.RespCode == easyCon.ERespSuccess {
 		// 返回成功
@@ -106,27 +109,27 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 	return nil, errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
 }
 
-// SendStatus 发送状态消息
-func (serv *MicroService) SendStatus(route string, content map[string]any) error {
-	arg := map[string]map[string]any{}
-	arg[route] = content
-	resp := serv.adapter.Req(routeModuleName, "StatusInput", arg)
-	if resp.RespCode == easyCon.ERespSuccess {
-		// 返回成功
-		return nil
-	}
-	// 返回异常
-	if resp.RespCode == easyCon.ERespTimeout {
-		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request timeout"))
-	}
-	if resp.RespCode == easyCon.ERespRouteNotFind {
-		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request route not find"))
-	}
-	if resp.RespCode == easyCon.ERespForbidden {
-		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request forbidden"))
-	}
-	return errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
-}
+//// SendStatus 发送状态消息
+//func (serv *MicroService) SendStatus(route string, content map[string]any) error {
+//	arg := map[string]map[string]any{}
+//	arg[route] = content
+//	resp := serv.adapter.Req(routeModuleName, "StatusInput", arg)
+//	if resp.RespCode == easyCon.ERespSuccess {
+//		// 返回成功
+//		return nil
+//	}
+//	// 返回异常
+//	if resp.RespCode == easyCon.ERespTimeout {
+//		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request timeout"))
+//	}
+//	if resp.RespCode == easyCon.ERespRouteNotFind {
+//		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request route not find"))
+//	}
+//	if resp.RespCode == easyCon.ERespForbidden {
+//		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request forbidden"))
+//	}
+//	return errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
+//}
 
 // SendNotice 发送通知
 func (serv *MicroService) SendNotice(route string, content any) {
@@ -162,6 +165,9 @@ func (serv *MicroService) initAdapter() {
 	}
 	// 创建连接
 	newName := serv.newModuleName(serv.setting.Module, serv.setting.DevCode)
+	if serv.setting.Module == routeModuleName && serv.setting.Mode.IsServer() {
+		newName = serv.setting.Module
+	}
 	apiSetting := easyCon.NewSetting(newName, serv.setting.Broker.Addr, serv.onReq, serv.onStatusChanged)
 	apiSetting.OnNotice = serv.onNotice
 	apiSetting.OnRetainNotice = serv.onRetainNotice
@@ -176,55 +182,33 @@ func (serv *MicroService) initAdapter() {
 	time.Sleep(time.Second)
 }
 
-//func (serv *MicroService) loadServDiscoveryList() {
-//	resp := serv.adapter.Req(routeModuleName, "DiscoveryList", []string{"local", serv.setting.DevCode})
-//	if resp.RespCode == easyCon.ERespSuccess {
-//		str, _ := json.Marshal(resp.Content)
-//		err := json.Unmarshal(str, &serv.servDiscovery)
-//		fmt.Println("【LoadServDiscoveryList】", serv.servDiscovery)
-//		if err != nil {
-//			writeErrLog("service.loadServDiscoveryList json error", err.Error())
-//			return
-//		}
-//	} else {
-//		writeErrLog("service.loadServDiscoveryList req error", fmt.Sprintf("%s,%s", resp.RespCode, resp.Error))
-//		return
-//	}
-//}
-
-func (serv *MicroService) KnockDoor() {
-	// 问主路由模块请求服务器的模块列表和本机的所有模块列表
-	//serv.loadServDiscoveryList()
-	if serv.setting.onLoadServDiscoveryList != nil {
-		str := serv.setting.onLoadServDiscoveryList()
-		err := json.Unmarshal([]byte(str), &serv.servDiscovery)
-		if err != nil {
-			writeErrLog("KnockDoor.loadServDiscoveryList json error", err.Error())
-			return
-		}
+func (serv *MicroService) knockDoor() {
+	if serv.setting.DevCode == "" {
+		// 单机模式不敲门
+		return
 	}
-
-	// 非单机模式，向Broker所在路由敲门
-	if serv.setting.DevCode != "" && strings.HasSuffix(serv.setting.DevCode, "[TEMP]") == false {
-		info := map[string]any{}
-		info["Id"] = serv.setting.DevCode
-		info["Name"] = serv.setting.DevName
-		info["Parent"] = serv.servDiscovery.Id
-		fmt.Println("【SetParentId】", serv.servDiscovery.Id)
-		info["Modules"] = []map[string]string{
-			{
-				"Name":    serv.setting.Module,
-				"Desc":    serv.setting.Desc,
-				"Version": serv.setting.Version,
-			},
-		}
-		// 向同级路由模块发送敲门
-		devCode := serv.setting.DevCode
-		if code, ok := serv.servDiscovery.Modules[routeModuleName]; ok {
-			devCode = code
-		}
-		_, _ = serv.SendRequest(serv.newModuleName(routeModuleName, devCode), "KnockDoor", info)
+	// 向同级路由模块发送敲门
+	info := map[string]any{}
+	info["Id"] = serv.setting.DevCode
+	info["Modules"] = []map[string]string{
+		{
+			"Name":    serv.setting.Module,
+			"Desc":    serv.setting.Desc,
+			"Version": serv.setting.Version,
+		},
 	}
+	name := routeModuleName
+	if serv.setting.Mode == EModeClient {
+		name = serv.newModuleName(routeModuleName, serv.setting.DevCode)
+	}
+	full := map[string]map[string]any{}
+	full[serv.setting.DevCode] = info
+	ctx, err := serv.SendRequest(name, "KnockDoor", full)
+	if err != nil {
+		panic(err)
+	}
+	// 获取路由模块返回的服务端模块列表
+	serv.brokerModules = qconvert.ToAny[map[string]string](ctx.Raw())
 }
 
 func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
@@ -296,29 +280,29 @@ func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
 		writeErrLog("service.onNotice", err)
 	})
 
-	if notice.Route == "GlobalStatusRetain" {
-		content := map[string]any{}
-		str, _ := json.Marshal(notice.Content)
-		_ = json.Unmarshal(str, &content)
-
-		// 外置方法
-		if serv.setting.onStatusHandler != nil {
-			for k, v := range content {
-				ctx, err := newContentByData(v)
-				if err != nil {
-					panic(err)
-				}
-				serv.setting.onStatusHandler(k, ctx)
-			}
-		}
-	}
+	//if notice.Route == "GlobalStatusRetain" {
+	//	content := map[string]any{}
+	//	str, _ := json.Marshal(notice.Content)
+	//	_ = json.Unmarshal(str, &content)
+	//
+	//	// 外置方法
+	//	if serv.setting.onStatusHandler != nil {
+	//		for k, v := range content {
+	//			ctx, err := newContentByData(v)
+	//			if err != nil {
+	//				panic(err)
+	//			}
+	//			serv.setting.onStatusHandler(k, ctx)
+	//		}
+	//	}
+	//}
 }
 
 func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyCon.EStatus) {
 	if status == easyCon.EStatusLinked {
 		// 断线重连后，再次敲门
 		if serv.initOk == true {
-			serv.KnockDoor()
+			serv.knockDoor()
 		}
 	}
 	if serv.setting.onCommStateHandler != nil {
@@ -333,7 +317,7 @@ func (serv *MicroService) onStart() {
 		serv.setting.onInitHandler(serv.setting.Module)
 	}
 
-	serv.KnockDoor()
+	serv.knockDoor()
 	serv.initOk = true
 }
 
@@ -345,14 +329,11 @@ func (serv *MicroService) onStop() {
 }
 
 func (serv *MicroService) newModuleName(module, code string) string {
-	if serv.setting.isAddModuleSuffix {
-		sp := strings.Split(module, ".")
-		if len(sp) >= 2 {
-			module = sp[0] + "." + code
-		} else {
-			module = module + "." + code
-		}
+	sp := strings.Split(module, ".")
+	if len(sp) >= 2 {
+		module = sp[0] + "." + code
+	} else {
+		module = module + "." + code
 	}
-	module = strings.Trim(module, ".")
-	return module
+	return strings.Trim(module, ".")
 }
