@@ -131,6 +131,34 @@ func (serv *MicroService) SendRequest(module, route string, params any) (qdefine
 //	return errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
 //}
 
+func (serv *MicroService) SendAlarm(alarmType string, alarmValue string) error {
+	// 客户端模式往客户端路由模块发送，反之往根路由发送
+	devCode := serv.setting.DevCode
+	if serv.setting.Mode.IsServer() {
+		devCode = ""
+	}
+	params := map[string]string{
+		"Type":  alarmType,
+		"Value": alarmValue,
+	}
+	resp := serv.adapter.Req(serv.newModuleName(routeModuleName, devCode), "CustomAlarm", params)
+	if resp.RespCode == easyCon.ERespSuccess {
+		// 返回成功
+		return nil
+	}
+	// 返回异常
+	if resp.RespCode == easyCon.ERespTimeout {
+		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request timeout"))
+	}
+	if resp.RespCode == easyCon.ERespRouteNotFind {
+		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request route not find"))
+	}
+	if resp.RespCode == easyCon.ERespForbidden {
+		return errors.New(fmt.Sprintf("%v:%s", resp.RespCode, "request forbidden"))
+	}
+	return errors.New(fmt.Sprintf("%v:%s,%s", resp.RespCode, resp.Content, resp.Error))
+}
+
 // SendNotice 发送通知
 func (serv *MicroService) SendNotice(route string, content any) {
 	err := serv.adapter.SendNotice(route, content)
@@ -150,6 +178,7 @@ func (serv *MicroService) SendLog(logType qdefine.ELog, content string, err erro
 	switch logType {
 	case qdefine.ELogError:
 		serv.adapter.Err(string(js), err)
+		writeErrLog(serv.setting.Module, content, err.Error())
 	case qdefine.ELogWarn:
 		serv.adapter.Warn(string(js))
 	case qdefine.ELogDebug:
@@ -216,7 +245,7 @@ func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp 
 		code = easyCon.ERespError
 		resp = err
 		// 记录日志
-		writeErrLog("service.onReq", err)
+		writeErrLog(serv.setting.Module, "service.onReq", err)
 	})
 
 	switch pack.Route {
@@ -261,7 +290,7 @@ func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp 
 func (serv *MicroService) onNotice(notice easyCon.PackNotice) {
 	defer errRecover(func(err string) {
 		// 记录日志
-		writeErrLog("service.onNotice", err)
+		writeErrLog(serv.setting.Module, "service.onNotice", err)
 	})
 
 	// 外置方法
@@ -277,7 +306,7 @@ func (serv *MicroService) onNotice(notice easyCon.PackNotice) {
 func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
 	defer errRecover(func(err string) {
 		// 记录日志
-		writeErrLog("service.onNotice", err)
+		writeErrLog(serv.setting.Module, "service.onNotice", err)
 	})
 
 	//if notice.Route == "GlobalStatusRetain" {

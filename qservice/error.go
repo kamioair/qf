@@ -14,6 +14,11 @@ import (
 
 var errorLogPath = "./log"
 
+func GetErrors(moduleName string, lineCount int) string {
+	//logFile := fmt.Sprintf("%s/%s/%s_%s_%s.log", errorLogPath, ym, day, moduleName, "Error")
+	return ""
+}
+
 // Recover
 //
 //	@Description: Panic的异常收集
@@ -26,12 +31,10 @@ func errRecover(after func(err string)) {
 
 		// 输出异常
 		log := ""
-		fmt.Println("")
 		nowTime := qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss")
 		color.New(color.FgWhite).PrintfFunc()(nowTime)
-		log += nowTime
 		color.New(color.FgRed, color.Bold).PrintfFunc()(" [ERROR] %s", r)
-		log += fmt.Sprintf(" [ERROR] %s\n", r)
+		log += fmt.Sprintf("%s\n", r)
 		fmt.Println("")
 		lines := strings.Split(stackInfo, "\n")
 		for i := 0; i < len(lines); i++ {
@@ -46,29 +49,23 @@ func errRecover(after func(err string)) {
 				}
 				color.New(color.FgMagenta).PrintfFunc()("%s\n", errStr)
 			}
-			log += fmt.Sprintf("%s\n", lines[i])
+			log += fmt.Sprintf(" %s\n", lines[i])
 		}
-		// 写入日志
-		logFile := fmt.Sprintf("%s/%s_Error.log", "./log", qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd"))
-		logFile = qio.GetFullPath(logFile)
-		log += "----------------------------------------------------------------------------------------------\n\n"
-		_ = qio.WriteString(logFile, log, true)
 
 		// 执行外部方法
 		if after != nil {
-			after(fmt.Sprintf("%s", r))
+			after(log)
 		}
 	}
 }
 
-func writeErrLog(tp string, err string) {
-	logStr := fmt.Sprintf("DateTime: %s\n", qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss"))
-	logStr += fmt.Sprintf("From: %s\n", tp)
-	logStr += fmt.Sprintf("Error: %s\n", err)
+func writeErrLog(module, tp string, err string) {
+	logStr := fmt.Sprintf("%s %s\n", qconvert.DateTime.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss"), tp)
+	logStr += fmt.Sprintf("%s\n", err)
 	logStr += "----------------------------------------------------------------------------------------------\n\n"
-	per := qconvert.DateTime.ToString(time.Now(), "yyyy-MM")
+	ym := qconvert.DateTime.ToString(time.Now(), "yyyy-MM")
 	day := qconvert.DateTime.ToString(time.Now(), "dd")
-	logFile := fmt.Sprintf("%s/%s/%s_%s.log", errorLogPath, per, day, "Error")
+	logFile := fmt.Sprintf("%s/%s/%s_%s_%s.log", errorLogPath, ym, day, module, "Error")
 	logFile = qio.GetFullPath(logFile)
 	_ = qio.WriteString(logFile, logStr, true)
 }

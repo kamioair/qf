@@ -59,7 +59,7 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	mqAddr := ""
 	// 根据传参更新配置
 	if len(os.Args) > 1 {
-		args := args{}
+		args := Args{}
 		err = json.Unmarshal([]byte(os.Args[1]), &args)
 		if err != nil {
 			panic(err)
@@ -101,6 +101,32 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	return setting
 }
 
+func (s *Setting) ReloadByCustomArgs(args Args) {
+	if args.Module != "" {
+		s.Module = args.Module
+	}
+	if args.ConfigPath != "" {
+		qconfig.ChangeFilePath(args.ConfigPath)
+		s.Broker = qdefine.BrokerConfig{
+			Addr:    qconfig.Get(s.Module, "mqtt.addr", "ws://127.0.0.1:5002/ws"),
+			UId:     qconfig.Get(s.Module, "mqtt.uid", ""),
+			Pwd:     qconfig.Get(s.Module, "mqtt.pwd", ""),
+			LogMode: qconfig.Get(s.Module, "mqtt.logMode", "NONE"),
+			TimeOut: qconfig.Get(s.Module, "mqtt.timeOut", 3000),
+			Retry:   qconfig.Get(s.Module, "mqtt.retry", 3),
+		}
+	}
+	if args.MqAddr != "" {
+		s.Broker.Addr = args.MqAddr
+	}
+	if args.DeviceCode != "" {
+		s.DevCode = args.DeviceCode
+	}
+	if args.LogPath != "" {
+		errorLogPath = args.LogPath
+	}
+}
+
 func (s *Setting) BindInitFunc(onInitHandler qdefine.InitHandler) *Setting {
 	s.onInitHandler = onInitHandler
 	return s
@@ -126,7 +152,7 @@ func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Settin
 	return s
 }
 
-type args struct {
+type Args struct {
 	Module     string
 	DeviceCode string
 	DeviceName string
