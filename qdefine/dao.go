@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/kamioair/qf/utils/qreflect"
 	"gorm.io/gorm"
+	"reflect"
 	"time"
 )
 
@@ -30,9 +31,13 @@ type BaseDao[T any] struct {
 //	@return *BaseDao[T]
 func NewDao[T any](db *gorm.DB) *BaseDao[T] {
 	// 主动创建数据库
-	err := db.AutoMigrate(new(T))
-	if err != nil {
-		return nil
+	m := new(T)
+	name := reflect.TypeOf(*m).Name()
+	if db.Migrator().HasTable(name) == false {
+		err := db.AutoMigrate(m)
+		if err != nil {
+			return nil
+		}
 	}
 	return &BaseDao[T]{db: db}
 }

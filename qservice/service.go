@@ -10,7 +10,6 @@ import (
 	"github.com/kamioair/qf/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -19,7 +18,6 @@ type MicroService struct {
 	adapter       easyCon.IAdapter
 	setting       *Setting
 	brokerModules map[string]string
-	initOk        bool
 }
 
 // NewService 创建服务
@@ -45,6 +43,11 @@ func NewService(setting *Setting) *MicroService {
 // Run 启动服务
 func (serv *MicroService) Run() {
 	qlauncher.Run(serv.onStart, serv.onStop)
+}
+
+// Stop 停止
+func (serv *MicroService) Stop() {
+	serv.onStop()
 }
 
 // Setting 获取设置
@@ -202,7 +205,7 @@ func (serv *MicroService) initAdapter() {
 	apiSetting.OnRetainNotice = serv.onRetainNotice
 	apiSetting.UID = serv.setting.Broker.UId
 	apiSetting.PWD = serv.setting.Broker.Pwd
-	apiSetting.TimeOut = time.Duration(serv.setting.Broker.TimeOut) * time.Second
+	apiSetting.TimeOut = time.Duration(serv.setting.Broker.TimeOut) * time.Millisecond
 	apiSetting.ReTry = serv.setting.Broker.Retry
 	apiSetting.LogMode = easyCon.ELogMode(serv.setting.Broker.LogMode)
 	serv.adapter = easyCon.NewMqttAdapter(apiSetting)
@@ -267,19 +270,7 @@ func (serv *MicroService) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp 
 		}
 		rs, err2 := serv.setting.onReqHandler(pack.Route, ctx)
 		if err2 != nil {
-			c, _ := strconv.Atoi(err2.Error())
-			switch c {
-			case int(easyCon.ERespBadReq):
-				return easyCon.ERespBadReq, "request bad"
-			case int(easyCon.ERespRouteNotFind):
-				return easyCon.ERespRouteNotFind, "request route not find"
-			case int(easyCon.ERespForbidden):
-				return easyCon.ERespForbidden, "request forbidden"
-			case int(easyCon.ERespTimeout):
-				return easyCon.ERespTimeout, "request timeout"
-			default:
-				return easyCon.ERespError, err2.Error()
-			}
+			return easyCon.ERespError, err2.Error()
 		}
 		// 执行成功，返回结果
 		return easyCon.ERespSuccess, rs
@@ -328,12 +319,6 @@ func (serv *MicroService) onRetainNotice(notice easyCon.PackNotice) {
 }
 
 func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyCon.EStatus) {
-	if status == easyCon.EStatusLinked {
-		// 断线重连后，再次敲门
-		if serv.initOk == true {
-			serv.knockDoor()
-		}
-	}
 	if serv.setting.onCommStateHandler != nil {
 		sn := qdefine.ECommState(status)
 		serv.setting.onCommStateHandler(sn)
@@ -347,7 +332,6 @@ func (serv *MicroService) onStart() {
 	}
 
 	serv.knockDoor()
-	serv.initOk = true
 }
 
 func (serv *MicroService) onStop() {

@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/fatih/color v1.18.0
 	github.com/gobeam/stringy v0.0.7
+	github.com/google/uuid v1.4.0
 	github.com/kardianos/service v1.2.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/spf13/viper v1.19.0

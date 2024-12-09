@@ -43,6 +43,12 @@ type Setting struct {
 	onCommStateHandler qdefine.StateHandler  // 通讯状态回调
 }
 
+type LogConfig struct {
+	Path        string
+	RemainDay   int
+	RemainLevel int
+}
+
 // NewSetting 创建模块配置
 func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	// 修改系统路径为当前目录
@@ -142,10 +148,10 @@ func (s *Setting) BindNoticeFunc(onNoticeHandler qdefine.NoticeHandler) *Setting
 	return s
 }
 
-func (s *Setting) BindStatusFunc(onRetainNoticeHandler qdefine.NoticeHandler) *Setting {
-	s.onStatusHandler = onRetainNoticeHandler
-	return s
-}
+//func (s *Setting) BindStatusFunc(onRetainNoticeHandler qdefine.NoticeHandler) *Setting {
+//	s.onStatusHandler = onRetainNoticeHandler
+//	return s
+//}
 
 func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Setting {
 	s.onCommStateHandler = onStateHandler
