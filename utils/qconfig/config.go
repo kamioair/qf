@@ -226,11 +226,14 @@ func findValueInData(data interface{}, keys []string) interface{} {
 		for k, v := range tp {
 			nv[strings.ToLower(k)] = v
 		}
-		if value, ok := nv[strings.ToLower(keys[0])]; ok {
-			if len(keys) == 1 {
-				return value
-			}
-			return findValueInData(value, keys[1:])
+		//if value, ok := nv[strings.ToLower(keys[0])]; ok {
+		//	if len(keys) == 1 {
+		//		return value
+		//	}
+		//	return findValueInData(value, keys[1:])
+		//}
+		if value, ok := nv[strings.ToLower(keys[len(keys)-1])]; ok {
+			return value
 		}
 	case []interface{}:
 		for _, item := range tp {

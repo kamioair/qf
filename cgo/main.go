@@ -20,13 +20,20 @@ static int NoticeHandler(OnNoticeCallback cb, char* route, char* paramStr, int p
 	return cb(route, paramStr, paramLen);
 }
 
+typedef int (*OnCommStateCallback)(char*);
+static int CommStateeHandler(OnCommStateCallback cb, char* state) {
+	return cb(state);
+}
+
 */
 import "C"
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/kamioair/qf/qdefine"
 	"github.com/kamioair/qf/qservice"
+	"github.com/kamioair/qf/utils/qio"
 	"unsafe"
 )
 
@@ -35,25 +42,42 @@ func main() {
 }
 
 var (
-	service              *qservice.MicroService
-	onInitCallbackFunc   C.OnInitCallback
-	onReqCallbackFunc    C.OnReqCallback
-	onNoticeCallbackFunc C.OnNoticeCallback
+	service                 *qservice.MicroService
+	onInitCallbackFunc      C.OnInitCallback
+	onReqCallbackFunc       C.OnReqCallback
+	onNoticeCallbackFunc    C.OnNoticeCallback
+	onCommStateCallbackFunc C.OnCommStateCallback
 )
 
+type startArg struct {
+	Module     string
+	Desc       string
+	Version    string
+	CustomArgs qservice.Args
+}
+
 //export Start
-func Start(moduleName *C.char, moduleDesc *C.char, descLen C.int, version *C.char,
-	customArgs *C.char, argsLen C.int, onInitCallback C.OnInitCallback, onReqCallback C.OnReqCallback, onNoticeCallback C.OnNoticeCallback) C.int {
-	name := string(C.GoString(moduleName))
-	desc := string(C.GoBytes(unsafe.Pointer(moduleDesc), descLen))
-	ver := string(C.GoString(version))
-	argStr := string(C.GoBytes(unsafe.Pointer(customArgs), argsLen))
+func Start(settingJson *C.char, settingLen C.int, onInitCallback C.OnInitCallback, onCommStateCallback C.OnCommStateCallback,
+	onReqCallback C.OnReqCallback, onNoticeCallback C.OnNoticeCallback) {
+
+	args := startArg{}
+	str := C.GoBytes(unsafe.Pointer(settingJson), settingLen)
+	err := json.Unmarshal([]byte(string(str)), &args)
+	if err != nil {
+		panic(err)
+	}
+
+	qio.WriteString(".\\log.txt", string(str), true)
+
 	onInitCallbackFunc = onInitCallback
 	onReqCallbackFunc = onReqCallback
 	onNoticeCallbackFunc = onNoticeCallback
+	onCommStateCallbackFunc = onCommStateCallback
+
+	qio.WriteString(".\\log.txt", fmt.Sprintln(args.Module, args.Desc, args.Version), true)
 
 	// 创建微服务
-	setting := qservice.NewSetting(name, desc, ver)
+	setting := qservice.NewSetting(args.Module, args.Desc, args.Version)
 	if onInitCallback != nil {
 		setting.BindInitFunc(onInit)
 	}
@@ -63,22 +87,16 @@ func Start(moduleName *C.char, moduleDesc *C.char, descLen C.int, version *C.cha
 	if onNoticeCallback != nil {
 		setting.BindNoticeFunc(onNoticeHandler)
 	}
-
-	// 重新传入参数
-	if argStr != "" {
-		args := qservice.Args{}
-		err := json.Unmarshal([]byte(argStr), &args)
-		if err != nil {
-			panic(err)
-		}
-		setting.ReloadByCustomArgs(args)
+	if onCommStateCallback != nil {
+		setting.BindCommStateFunc(onCommStateHandler)
 	}
 
-	service = qservice.NewService(setting)
+	// 重新设置参数
+	setting.ReloadByCustomArgs(args.CustomArgs)
 
 	// 启动微服务
-	go service.Run()
-	return C.int(1)
+	service = qservice.NewService(setting)
+	service.Run()
 }
 
 //export Stop
@@ -89,34 +107,41 @@ func Stop() {
 	service.Stop()
 }
 
+type Resp struct {
+	Content any
+	Error   string
+}
+
 //export SendRequest
-func SendRequest(module, route *C.char, paramsJson *C.char, paramsLen C.int,
-	respJson **C.char, respLength *C.int, errorStr **C.char, errorLen *C.int) C.int {
+func SendRequest(module, route *C.char, paramsJson *C.char, paramsLen C.int, respJson **C.char, respLength *C.int) C.int {
+
+	resp := Resp{}
 
 	var params any
 	str := C.GoBytes(unsafe.Pointer(paramsJson), paramsLen)
 	err := json.Unmarshal([]byte(string(str)), &params)
 	if err != nil {
-		data, _ := json.Marshal(err)
-		*errorStr = (*C.char)(C.CBytes(data))
-		*errorLen = C.int(len(data))
-		return C.int(0)
+		resp.Error = err.Error()
 	}
 
-	moduleGo := C.GoString(module)
-	routeGo := C.GoString(route)
+	// 执行请求
+	moduleGo := string(C.GoString(module))
+	routeGo := string(C.GoString(route))
 	ctx, err := service.SendRequest(moduleGo, routeGo, params)
 	if err != nil {
-		data, _ := json.Marshal(err)
-		*errorStr = (*C.char)(C.CBytes(data))
-		*errorLen = C.int(len(data))
-		return C.int(0)
+		resp.Error = err.Error()
+	} else {
+		resp.Content = ctx.Raw()
 	}
 
-	data, _ := json.Marshal(ctx.Raw())
+	// 转为Json
+	data, _ := json.Marshal(resp)
 	*respJson = (*C.char)(C.CBytes(data))
 	*respLength = C.int(len(data))
 
+	if resp.Error != "" {
+		return C.int(0)
+	}
 	return C.int(1)
 }
 
@@ -165,6 +190,12 @@ func onNoticeHandler(route string, ctx qdefine.Context) {
 	packStr := (*C.char)(C.CBytes(data))
 
 	C.NoticeHandler(onNoticeCallbackFunc, C.CString(route), packStr, size)
+}
+
+func onCommStateHandler(state qdefine.ECommState) {
+	if onCommStateCallbackFunc != nil {
+		C.CommStateeHandler(onCommStateCallbackFunc, C.CString(string(state)))
+	}
 }
 
 func onReqHandler(route string, ctx qdefine.Context) (any, error) {

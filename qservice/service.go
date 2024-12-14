@@ -48,6 +48,7 @@ func (serv *MicroService) Run() {
 // Stop 停止
 func (serv *MicroService) Stop() {
 	serv.onStop()
+	qlauncher.Exit()
 }
 
 // Setting 获取设置
@@ -201,21 +202,29 @@ func (serv *MicroService) initAdapter() {
 		newName = serv.setting.Module
 	}
 	apiSetting := easyCon.NewSetting(newName, serv.setting.Broker.Addr, serv.onReq, serv.onStatusChanged)
-	apiSetting.OnNotice = serv.onNotice
-	apiSetting.OnRetainNotice = serv.onRetainNotice
+	if serv.setting.onNoticeHandler != nil {
+		apiSetting.OnNotice = serv.onNotice
+	}
+	if serv.setting.onStatusHandler != nil {
+		apiSetting.OnRetainNotice = serv.onRetainNotice
+	}
+	if serv.setting.onAcceptDetectedHandler != nil {
+		apiSetting.OnRespDetected = serv.onRespDetected
+	}
 	apiSetting.UID = serv.setting.Broker.UId
 	apiSetting.PWD = serv.setting.Broker.Pwd
 	apiSetting.TimeOut = time.Duration(serv.setting.Broker.TimeOut) * time.Millisecond
 	apiSetting.ReTry = serv.setting.Broker.Retry
 	apiSetting.LogMode = easyCon.ELogMode(serv.setting.Broker.LogMode)
+	apiSetting.DetectedRoutes = serv.setting.Broker.DetectedRoutes
 	serv.adapter = easyCon.NewMqttAdapter(apiSetting)
 
 	// 等待确保连接成功
-	time.Sleep(time.Second)
+	time.Sleep(time.Millisecond * 50)
 }
 
 func (serv *MicroService) knockDoor() {
-	if serv.setting.DevCode == "" {
+	if serv.setting.DevCode == "" || strings.HasSuffix(serv.setting.DevCode, "[TEMP]") {
 		// 单机模式不敲门
 		return
 	}
@@ -323,6 +332,17 @@ func (serv *MicroService) onStatusChanged(adapter easyCon.IAdapter, status easyC
 		sn := qdefine.ECommState(status)
 		serv.setting.onCommStateHandler(sn)
 	}
+}
+
+func (serv *MicroService) onRespDetected(pack easyCon.PackResp) {
+	if serv.setting.onAcceptDetectedHandler == nil {
+		return
+	}
+	ctx, err := newContentByResp(pack)
+	if err != nil {
+		panic(err)
+	}
+	serv.setting.onAcceptDetectedHandler(pack.From, pack.Route, ctx)
 }
 
 func (serv *MicroService) onStart() {

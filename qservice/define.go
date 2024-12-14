@@ -29,18 +29,18 @@ const (
 
 // Setting 模块配置
 type Setting struct {
-	Mode    EServerMode          // 路由模式
-	Module  string               // 模块服务名称
-	Desc    string               // 模块服务描述
-	Version string               // 模块服务版本
-	DevCode string               // 设备码
-	Broker  qdefine.BrokerConfig // 主服务配置
-
-	onInitHandler      qdefine.InitHandler   // 初始化回调
-	onReqHandler       qdefine.ReqHandler    // 请求回调
-	onNoticeHandler    qdefine.NoticeHandler // 通知回调
-	onStatusHandler    qdefine.NoticeHandler // 全局状态回调
-	onCommStateHandler qdefine.StateHandler  // 通讯状态回调
+	Mode                    EServerMode             // 路由模式
+	Module                  string                  // 模块服务名称
+	Desc                    string                  // 模块服务描述
+	Version                 string                  // 模块服务版本
+	DevCode                 string                  // 设备码
+	Broker                  qdefine.BrokerConfig    // 主服务配置
+	onInitHandler           qdefine.InitHandler     // 初始化回调
+	onReqHandler            qdefine.ReqHandler      // 请求回调
+	onNoticeHandler         qdefine.NoticeHandler   // 通知回调
+	onStatusHandler         qdefine.NoticeHandler   // 全局状态回调
+	onAcceptDetectedHandler qdefine.DetectedHandler // 接收暴露的路由执行内容
+	onCommStateHandler      qdefine.StateHandler    // 通讯状态回调
 }
 
 type LogConfig struct {
@@ -62,7 +62,7 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	errorLogPath = "./log"
 	module := moduleName
 	devCode := ""
-	mqAddr := ""
+	brokerArg := qdefine.BrokerConfig{}
 	// 根据传参更新配置
 	if len(os.Args) > 1 {
 		args := Args{}
@@ -70,7 +70,7 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 		if err != nil {
 			panic(err)
 		}
-		mqAddr = args.MqAddr
+		brokerArg = args.Broker
 		devCode = args.DeviceCode
 		if args.Module != "" {
 			module = args.Module
@@ -85,15 +85,16 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	// 设置配置文件路径
 	qconfig.ChangeFilePath(configPath)
 	broker := qdefine.BrokerConfig{
-		Addr:    qconfig.Get(module, "mqtt.addr", "ws://127.0.0.1:5002/ws"),
-		UId:     qconfig.Get(module, "mqtt.uid", ""),
-		Pwd:     qconfig.Get(module, "mqtt.pwd", ""),
-		LogMode: qconfig.Get(module, "mqtt.logMode", "NONE"),
-		TimeOut: qconfig.Get(module, "mqtt.timeOut", 3000),
-		Retry:   qconfig.Get(module, "mqtt.retry", 3),
+		Addr:           qconfig.Get(module, "mqtt.addr", "ws://127.0.0.1:5002/ws"),
+		UId:            qconfig.Get(module, "mqtt.uid", ""),
+		Pwd:            qconfig.Get(module, "mqtt.pwd", ""),
+		LogMode:        qconfig.Get(module, "mqtt.logMode", "NONE"),
+		TimeOut:        qconfig.Get(module, "mqtt.timeOut", 3000),
+		Retry:          qconfig.Get(module, "mqtt.retry", 3),
+		DetectedRoutes: qconfig.Get(module, "mqtt.detectedRoutes", []string{}),
 	}
-	if mqAddr != "" {
-		broker.Addr = mqAddr
+	if brokerArg.Addr != "" {
+		broker = brokerArg
 	}
 	// 返回配置
 	setting := &Setting{
@@ -122,8 +123,8 @@ func (s *Setting) ReloadByCustomArgs(args Args) {
 			Retry:   qconfig.Get(s.Module, "mqtt.retry", 3),
 		}
 	}
-	if args.MqAddr != "" {
-		s.Broker.Addr = args.MqAddr
+	if args.Broker.Addr != "" {
+		s.Broker = args.Broker
 	}
 	if args.DeviceCode != "" {
 		s.DevCode = args.DeviceCode
@@ -148,6 +149,10 @@ func (s *Setting) BindNoticeFunc(onNoticeHandler qdefine.NoticeHandler) *Setting
 	return s
 }
 
+func (s *Setting) BindRespDetectedFunc() {
+
+}
+
 //func (s *Setting) BindStatusFunc(onRetainNoticeHandler qdefine.NoticeHandler) *Setting {
 //	s.onStatusHandler = onRetainNoticeHandler
 //	return s
@@ -160,17 +165,17 @@ func (s *Setting) BindCommStateFunc(onStateHandler qdefine.StateHandler) *Settin
 
 type Args struct {
 	Module     string
+	Broker     qdefine.BrokerConfig
 	DeviceCode string
 	DeviceName string
 	ConfigPath string
 	LogPath    string
-	MqAddr     string
 }
 
-type servDiscovery struct {
-	Id      string            // 服务器Broker所在设备ID
-	Modules map[string]string // 包含的服务器模块和请求设备的模块列表，key为模块名称，value为设备Id，用于请求设备查找请求模块所在的设备
-}
+//type servDiscovery struct {
+//	Id      string            // 服务器Broker所在设备ID
+//	Modules map[string]string // 包含的服务器模块和请求设备的模块列表，key为模块名称，value为设备Id，用于请求设备查找请求模块所在的设备
+//}
 
 type runLog struct {
 	Id      string // 来至设备ID
