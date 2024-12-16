@@ -35,6 +35,7 @@ type Setting struct {
 	Version                 string                  // 模块服务版本
 	DevCode                 string                  // 设备码
 	Broker                  qdefine.BrokerConfig    // 主服务配置
+	DetectedRoutes          []string                // 需要对外暴露的方法列表
 	onInitHandler           qdefine.InitHandler     // 初始化回调
 	onReqHandler            qdefine.ReqHandler      // 请求回调
 	onNoticeHandler         qdefine.NoticeHandler   // 通知回调
@@ -85,25 +86,25 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	// 设置配置文件路径
 	qconfig.ChangeFilePath(configPath)
 	broker := qdefine.BrokerConfig{
-		Addr:           qconfig.Get(module, "mqtt.addr", "ws://127.0.0.1:5002/ws"),
-		UId:            qconfig.Get(module, "mqtt.uid", ""),
-		Pwd:            qconfig.Get(module, "mqtt.pwd", ""),
-		LogMode:        qconfig.Get(module, "mqtt.logMode", "NONE"),
-		TimeOut:        qconfig.Get(module, "mqtt.timeOut", 3000),
-		Retry:          qconfig.Get(module, "mqtt.retry", 3),
-		DetectedRoutes: qconfig.Get(module, "mqtt.detectedRoutes", []string{}),
+		Addr:    qconfig.Get("", "mqtt.addr", "ws://127.0.0.1:5002/ws"),
+		UId:     qconfig.Get("", "mqtt.uid", ""),
+		Pwd:     qconfig.Get("", "mqtt.pwd", ""),
+		LogMode: qconfig.Get("", "mqtt.logMode", "NONE"),
+		TimeOut: qconfig.Get("", "mqtt.timeOut", 3000),
+		Retry:   qconfig.Get("", "mqtt.retry", 3),
 	}
 	if brokerArg.Addr != "" {
 		broker = brokerArg
 	}
 	// 返回配置
 	setting := &Setting{
-		Mode:    EServerMode(qconfig.Get(module, "mode", "client")),
-		Module:  module,
-		Desc:    moduleDesc,
-		Version: version,
-		Broker:  broker,
-		DevCode: devCode,
+		Mode:           EServerMode(qconfig.Get("", "mode", "client")),
+		DetectedRoutes: qconfig.Get("", "detectedRoutes", []string{}),
+		Module:         module,
+		Desc:           moduleDesc,
+		Version:        version,
+		Broker:         broker,
+		DevCode:        devCode,
 	}
 	return setting
 }
@@ -115,12 +116,12 @@ func (s *Setting) ReloadByCustomArgs(args Args) {
 	if args.ConfigPath != "" {
 		qconfig.ChangeFilePath(args.ConfigPath)
 		s.Broker = qdefine.BrokerConfig{
-			Addr:    qconfig.Get(s.Module, "mqtt.addr", "ws://127.0.0.1:5002/ws"),
-			UId:     qconfig.Get(s.Module, "mqtt.uid", ""),
-			Pwd:     qconfig.Get(s.Module, "mqtt.pwd", ""),
-			LogMode: qconfig.Get(s.Module, "mqtt.logMode", "NONE"),
-			TimeOut: qconfig.Get(s.Module, "mqtt.timeOut", 3000),
-			Retry:   qconfig.Get(s.Module, "mqtt.retry", 3),
+			Addr:    qconfig.Get("", "mqtt.addr", "ws://127.0.0.1:5002/ws"),
+			UId:     qconfig.Get("", "mqtt.uid", ""),
+			Pwd:     qconfig.Get("", "mqtt.pwd", ""),
+			LogMode: qconfig.Get("", "mqtt.logMode", "NONE"),
+			TimeOut: qconfig.Get("", "mqtt.timeOut", 3000),
+			Retry:   qconfig.Get("", "mqtt.retry", 3),
 		}
 	}
 	if args.Broker.Addr != "" {

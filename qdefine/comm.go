@@ -2,13 +2,12 @@ package qdefine
 
 // BrokerConfig 主服务配置
 type BrokerConfig struct {
-	Addr           string
-	UId            string
-	Pwd            string
-	LogMode        string
-	TimeOut        int
-	Retry          int
-	DetectedRoutes []string // 需要对外暴露的方法列表
+	Addr    string
+	UId     string
+	Pwd     string
+	LogMode string
+	TimeOut int
+	Retry   int
 }
 
 type (

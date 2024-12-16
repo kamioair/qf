@@ -30,10 +30,8 @@ import "C"
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/kamioair/qf/qdefine"
 	"github.com/kamioair/qf/qservice"
-	"github.com/kamioair/qf/utils/qio"
 	"unsafe"
 )
 
@@ -50,10 +48,10 @@ var (
 )
 
 type startArg struct {
-	Module     string
-	Desc       string
+	ModuleName string
+	ModuleDesc string
 	Version    string
-	CustomArgs qservice.Args
+	Args       qservice.Args
 }
 
 //export Start
@@ -67,17 +65,13 @@ func Start(settingJson *C.char, settingLen C.int, onInitCallback C.OnInitCallbac
 		panic(err)
 	}
 
-	qio.WriteString(".\\log.txt", string(str), true)
-
 	onInitCallbackFunc = onInitCallback
 	onReqCallbackFunc = onReqCallback
 	onNoticeCallbackFunc = onNoticeCallback
 	onCommStateCallbackFunc = onCommStateCallback
 
-	qio.WriteString(".\\log.txt", fmt.Sprintln(args.Module, args.Desc, args.Version), true)
-
 	// 创建微服务
-	setting := qservice.NewSetting(args.Module, args.Desc, args.Version)
+	setting := qservice.NewSetting(args.ModuleName, args.ModuleDesc, args.Version)
 	if onInitCallback != nil {
 		setting.BindInitFunc(onInit)
 	}
@@ -92,7 +86,7 @@ func Start(settingJson *C.char, settingLen C.int, onInitCallback C.OnInitCallbac
 	}
 
 	// 重新设置参数
-	setting.ReloadByCustomArgs(args.CustomArgs)
+	setting.ReloadByCustomArgs(args.Args)
 
 	// 启动微服务
 	service = qservice.NewService(setting)

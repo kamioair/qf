@@ -32,6 +32,8 @@ import (
 var (
 	stopChan = make(chan struct{}, 1)
 	wg       = &sync.WaitGroup{}
+	exitWg   = &sync.WaitGroup{}
+	serv     service.Service
 )
 
 // Run 运行服务
@@ -46,12 +48,16 @@ func RunEx(start func(param interface{}), param interface{}, stop func()) {
 
 // Exit 退出服务
 func Exit() {
-	go func() {
-		time.Sleep(time.Millisecond * 100)
-		close(stopChan)
-		wg.Wait()
-		os.Exit(0)
-	}()
+	//qio.WriteString(".\\log.txt", "Exit start", true)
+	//go func() {
+	//	time.Sleep(time.Millisecond * 100)
+	//	close(stopChan)
+	//	wg.Wait()
+	//	qio.WriteString(".\\log.txt", "Exit end", true)
+	//}()
+	time.Sleep(time.Millisecond * 100)
+	close(stopChan)
+	wg.Wait()
 }
 
 type program struct {
@@ -74,7 +80,7 @@ func setup(start func(), startEx func(param interface{}), param interface{}, sto
 	cd = strings.Replace(cd, "\\", "/", -1)
 	n1 := strings.Split(path.Dir(cd), "/")
 	n2 := strings.TrimSuffix(path.Base(cd), path.Ext(cd))
-	serv, err := service.New(pm, &service.Config{
+	serv, err = service.New(pm, &service.Config{
 		// 统一使用 目录名_文件名 作为服务名
 		Name: n1[len(n1)-1] + "_" + n2,
 	})
@@ -107,11 +113,14 @@ func setup(start func(), startEx func(param interface{}), param interface{}, sto
 		}
 	}
 	// 运行
-	err = serv.Run()
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	exitWg.Add(1)
+	go func() {
+		err = serv.Run()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	exitWg.Wait()
 }
 
 func (p *program) Start(s service.Service) error {
@@ -143,6 +152,7 @@ func (p *program) run() {
 			}
 			// 全部退出完成
 			wg.Done()
+			exitWg.Done()
 			return
 		}
 	}
