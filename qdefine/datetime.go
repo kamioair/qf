@@ -25,6 +25,84 @@ func NewDateTime(t time.Time) DateTime {
 	return DateTime(v)
 }
 
+// AddDays
+//
+//	@Description: 增减天数
+//	@param day 天数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) AddDays(day int) Date {
+	t := d.ToTime()
+	t = t.AddDate(0, 0, day)
+	return NewDate(t)
+}
+
+// AddMonths
+//
+//	@Description: 增减月数
+//	@param month 月数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) AddMonths(month int) Date {
+	t := d.ToTime()
+	t = t.AddDate(0, month, 0)
+	return NewDate(t)
+}
+
+// AddYears
+//
+//	@Description: 增减年数
+//	@param year 年数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) AddYears(year int) Date {
+	t := d.ToTime()
+	t = t.AddDate(year, 0, 0)
+	return NewDate(t)
+}
+
+// AddHours
+//
+//	@Description: 增减小时数
+//	@param hour 小时数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) AddHours(hour int) Date {
+	t := d.ToTime()
+	t = t.Add(time.Hour * time.Duration(hour))
+	return NewDate(t)
+}
+
+// AddMinutes
+//
+//	@Description: 增减分钟数
+//	@param minute 分钟数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) AddMinutes(minute int) Date {
+	t := d.ToTime()
+	t = t.Add(time.Minute * time.Duration(minute))
+	return NewDate(t)
+}
+
+// AddSeconds
+//
+//	@Description: 增减秒数
+//	@param second 秒数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) AddSeconds(second int) Date {
+	t := d.ToTime()
+	t = t.Add(time.Second * time.Duration(second))
+	return NewDate(t)
+}
+
 // ToString
 //
 //	@Description: 根据全局format格式化输出

@@ -25,6 +25,45 @@ func NewDate(t time.Time) Date {
 	return Date(v)
 }
 
+// AddDays
+//
+//	@Description: 增减天数
+//	@param day 天数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d Date) AddDays(day int) Date {
+	t := d.ToTime()
+	t = t.AddDate(0, 0, day)
+	return NewDate(t)
+}
+
+// AddMonths
+//
+//	@Description: 增减月数
+//	@param month 月数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d Date) AddMonths(month int) Date {
+	t := d.ToTime()
+	t = t.AddDate(0, month, 0)
+	return NewDate(t)
+}
+
+// AddYears
+//
+//	@Description: 增减年数
+//	@param year 年数
+//	@return Date
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d Date) AddYears(year int) Date {
+	t := d.ToTime()
+	t = t.AddDate(year, 0, 0)
+	return NewDate(t)
+}
+
 // ToTime
 //
 //	@Description: 转为原生时间对象
