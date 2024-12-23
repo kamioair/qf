@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kamioair/qf/utils/qio"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
@@ -31,7 +32,7 @@ func NewDb(module string) *gorm.DB {
 	gc := gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
-			NoLowerCase:   true,
+			NoLowerCase:   setting.Config.NoLowerCase,
 		},
 		SkipDefaultTransaction: setting.Config.SkipDefaultTransaction,
 	}
@@ -72,6 +73,12 @@ func NewDb(module string) *gorm.DB {
 	case "mysql":
 		dsn := sp[1]
 		db, err = gorm.Open(mysql.Open(dsn), &gc)
+		if err != nil {
+			panic(err)
+		}
+	case "postgres":
+		dsn := sp[1]
+		db, err = gorm.Open(postgres.Open(dsn), &gc)
 		if err != nil {
 			panic(err)
 		}

@@ -25,6 +25,78 @@ func NewDateTime(t time.Time) DateTime {
 	return DateTime(v)
 }
 
+// ForTo
+//
+//	@Description: 自动循环遍历日期，并按日返回每天日期
+//	@param endDate 结束日期
+//	@param interval 日期间隔
+//	@param callback 回调
+//	@return int YYYY年+WW周，如 202451
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) ForTo(endDate DateTime, interval uint, callback func(curr DateTime)) {
+	start := d.ToTime()
+	end := endDate.ToTime()
+
+	// 判断正序或逆序
+	if start.Before(end) || start.Equal(end) {
+		// 正序遍历
+		for current := start; !current.After(end); current = current.AddDate(0, 0, int(interval)) {
+			callback(NewDateTime(current))
+		}
+	} else {
+		// 逆序遍历
+		for current := start; !current.Before(end); current = current.AddDate(0, 0, -int(interval)) {
+			callback(NewDateTime(current))
+		}
+	}
+}
+
+// YearWeek
+//
+//	@Description: 获取当前日期所在本能的周数
+//	@return int YYYY年+WW周，如 202451
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) YearWeek() int {
+	y, w := time.Now().ISOWeek()
+	str := fmt.Sprintf("%d%d", y, w)
+	week, _ := strconv.Atoi(str)
+	return week
+}
+
+// Week
+//
+//	@Description: 获取当前日期是周几
+//	@return int YYYY年+WW周，如 202451
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) Week() time.Weekday {
+	return d.ToTime().Weekday()
+}
+
+// CurrentToWeekday
+//
+//	@Description: 获取当前日期所在本周指定周几的日期
+//	@param weekday 需要返回周几
+//	@return date 周几日期
+//
+//goland:noinspection GoMixedReceiverTypes
+func (d DateTime) CurrentToWeekday(weekday time.Weekday) DateTime {
+	now := d.ToTime()
+	// 获取当前是周几 (0=周日, 1=周一, ..., 6=周六)
+	currentWeekday := int(now.Weekday())
+	if currentWeekday == 0 {
+		currentWeekday = 7 // 将周日看作一周的第 7 天
+	}
+	// 计算本周的目标周几的偏移天数
+	// 如果目标周几比当前周几大，偏移为正；如果比当前小，偏移为负
+	offset := int(weekday) - currentWeekday
+	// 计算目标日期
+	targetDate := now.AddDate(0, 0, offset)
+	return NewDateTime(targetDate)
+}
+
 // AddDays
 //
 //	@Description: 增减天数

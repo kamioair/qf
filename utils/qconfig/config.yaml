@@ -1,9 +1,11 @@
 ############################### MQTT Config ###############################
 # 默认MQTT配置
-#   logMode：日志模式，NONE|CONSOLE|FILE|UPLOAD|ALL
 #   addr：服务器broker地址
-#   username：用户名
-#   password：密码
+#   uid: 用户名
+#   pwd: 密码
+#   logMode：日志模式，NONE|CONSOLE|FILE|UPLOAD|ALL
+#   timeOut：超时时间，单位毫秒，默认三秒
+#   retry：超时重试次数，默认3次
 mqtt:
   addr: "ws://127.0.0.1:5002/ws"
   uid: ""
@@ -22,27 +24,15 @@ mqtt:
 #       - OFF：完全关闭journal模式，不记录任何日志消息
 #   sqlserver|用户名:密码@地址?database=数据库&encrypt=disable
 #   mysql|用户名:密码@tcp(127.0.0.1:3306)/数据库?charset=utf8mb4&parseTime=True&loc=Local
+#   postgres|host=服务器IP port=5432 user=postgres password=密码 dbname=数据库 sslmode=disable
 # 其他设置
 #   openLog：是否打开调试日志
-#   skipDefaultTransaction：是否跳过默认事务
+#   skipDefaultTransaction：是否跳过默认事务（默认true）
+#   noLowerCase：是否使用蛇形小写方式 true:不使用 false:使用（默认false）
 db:
   connect: sqlite|./db/data.db&OFF
   config:
     openLog: false
     skipDefaultTransaction: true
-
-############################### Route Config ###############################
-# 路由配置
-#   mode：模式，client/server/root
-#   upMqtt：上级MQTT连接配置
-route:
-  mode: client
-  upMqtt:
-    addr: ""
-    uid: ""
-    pwd: ""
-    logMode: "NONE"
-    timeOut: 3000
-    retry: 3
 
 ############################### Modules Config ###############################

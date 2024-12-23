@@ -110,6 +110,27 @@ func (dao *BaseDao[T]) Update(model *T) error {
 	return errors.New("update record does not exist")
 }
 
+// UpdateList
+//
+//	@Description: 修改一组记录
+//	@param list 列表
+//	@return error
+func (dao *BaseDao[T]) UpdateList(list []T) error {
+	err := dao.DB().Transaction(func(tx *gorm.DB) error {
+		for _, model := range list {
+			ref := qreflect.New(model)
+			if ref.Get("LastTime") == "0001-01-01 00:00:00" {
+				_ = ref.Set("LastTime", NewDateTime(time.Now()))
+			}
+			if err := tx.Updates(&model).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err
+}
+
 // Save
 //
 //	@Description: 修改一条记录（不存在则新增）
@@ -124,6 +145,27 @@ func (dao *BaseDao[T]) Save(model *T) error {
 	// 提交
 	result := dao.DB().Save(model)
 	return result.Error
+}
+
+// SaveList
+//
+//	@Description: 修改一组记录（不存在则新增）
+//	@param list 列表
+//	@return error
+func (dao *BaseDao[T]) SaveList(list []T) error {
+	err := dao.DB().Transaction(func(tx *gorm.DB) error {
+		for _, model := range list {
+			ref := qreflect.New(model)
+			if ref.Get("LastTime") == "0001-01-01 00:00:00" {
+				_ = ref.Set("LastTime", NewDateTime(time.Now()))
+			}
+			if err := tx.Save(&model).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err
 }
 
 // Delete
@@ -196,7 +238,7 @@ func (dao *BaseDao[T]) GetList(startId uint64, maxCount int) ([]T, error) {
 	// 查询
 	result := dao.DB().Limit(int(maxCount)).Offset(int(startId)).Find(&list)
 	if result.Error != nil || result.RowsAffected == 0 {
-		return nil, result.Error
+		return list, result.Error
 	}
 	return list, nil
 }
@@ -211,7 +253,7 @@ func (dao *BaseDao[T]) GetAll() ([]T, error) {
 	// 查询
 	result := dao.DB().Find(&list)
 	if result.Error != nil || result.RowsAffected == 0 {
-		return nil, result.Error
+		return list, result.Error
 	}
 	return list, nil
 }
@@ -245,7 +287,7 @@ func (dao *BaseDao[T]) GetConditions(query interface{}, args ...interface{}) ([]
 	// 查询
 	result := dao.DB().Where(query, args...).Find(&list)
 	if result.Error != nil || result.RowsAffected == 0 {
-		return nil, result.Error
+		return list, result.Error
 	}
 	return list, nil
 }
@@ -264,12 +306,12 @@ func (dao *BaseDao[T]) GetConditionsLimit(maxCount int, query interface{}, args 
 	if maxCount > 0 {
 		result := dao.DB().Where(query, args...).Limit(maxCount).Find(&list)
 		if result.Error != nil || result.RowsAffected == 0 {
-			return nil, result.Error
+			return list, result.Error
 		}
 	} else {
 		result := dao.DB().Where(query, args...).Find(&list)
 		if result.Error != nil || result.RowsAffected == 0 {
-			return nil, result.Error
+			return list, result.Error
 		}
 	}
 	return list, nil
