@@ -36,6 +36,7 @@ type Setting struct {
 	DevCode                 string                  // 设备码
 	Broker                  qdefine.BrokerConfig    // 主服务配置
 	DetectedRoutes          []string                // 需要对外暴露的方法列表
+	WatchedModules          []string                // 需要监听暴露的模块列表
 	onInitHandler           qdefine.InitHandler     // 初始化回调
 	onReqHandler            qdefine.ReqHandler      // 请求回调
 	onNoticeHandler         qdefine.NoticeHandler   // 通知回调
@@ -99,7 +100,8 @@ func NewSetting(moduleName, moduleDesc, version string) *Setting {
 	// 返回配置
 	setting := &Setting{
 		Mode:           EServerMode(qconfig.Get("", "mode", "client")),
-		DetectedRoutes: qconfig.Get("", "detectedRoutes", []string{}),
+		DetectedRoutes: qconfig.Get(module, "detectedRoutes", []string{}),
+		WatchedModules: qconfig.Get(module, "watchedModules", []string{}),
 		Module:         module,
 		Desc:           moduleDesc,
 		Version:        version,

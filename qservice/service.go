@@ -217,6 +217,7 @@ func (serv *MicroService) initAdapter() {
 	apiSetting.ReTry = serv.setting.Broker.Retry
 	apiSetting.LogMode = easyCon.ELogMode(serv.setting.Broker.LogMode)
 	apiSetting.DetectedRoutes = serv.setting.DetectedRoutes
+	apiSetting.WatchedModules = serv.setting.WatchedModules
 	serv.adapter = easyCon.NewMqttAdapter(apiSetting)
 
 	// 等待确保连接成功
