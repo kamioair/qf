@@ -150,8 +150,9 @@ func (s *Setting) BindNoticeFunc(onNoticeHandler qdefine.NoticeHandler) *Setting
 	return s
 }
 
-func (s *Setting) BindRespDetectedFunc() {
-
+func (s *Setting) BindRespDetectedFunc(onDetectedHandler qdefine.DetectedHandler) *Setting {
+	s.onAcceptDetectedHandler = onDetectedHandler
+	return s
 }
 
 //func (s *Setting) BindStatusFunc(onRetainNoticeHandler qdefine.NoticeHandler) *Setting {
