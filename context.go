@@ -1,21 +1,47 @@
-package qservice
+package qf
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/gobeam/stringy"
-	"github.com/kamioair/qf/qdefine"
+	"github.com/kamioair/utils/qtime"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"reflect"
 	"strconv"
 	"strings"
 )
 
+// File 文件
+type File struct {
+	Name string // 文件名
+	Size int64  // 文件大小
+	Data []byte // 内容
+}
+
+type CommPack struct {
+	Id   uint64
+	From string
+	To   string
+}
+
+// IContext 上下文
+type IContext interface {
+	GetString(key string) string
+	GetInt(key string) int
+	GetUInt(key string) uint64
+	GetByte(key string) byte
+	GetBool(key string) bool
+	GetDate(key string) qtime.Date
+	GetDateTime(key string) qtime.DateTime
+	GetFiles(key string) []File
+	GetStruct(key string, refStruct any)
+	GetCommPack() CommPack
+	Raw() any
+}
+
 type context struct {
-	reqPack    easyCon.PackReq
-	respPack   easyCon.PackResp
-	noticePack easyCon.PackNotice
-	values     *values
+	values *values
+	pack   CommPack
 }
 
 type values struct {
@@ -24,57 +50,25 @@ type values struct {
 	OutputValue interface{}
 }
 
-func newContentByReq(pack easyCon.PackReq) (*context, error) {
-	ctx := &context{
-		reqPack: pack,
-		values: &values{
-			InputMaps: make([]map[string]interface{}, 0),
-		},
-	}
-	err := setData(ctx, pack.Content)
-	if err != nil {
-		return nil, err
-	}
-	return ctx, nil
-}
-
-func newContentByResp(pack easyCon.PackResp) (*context, error) {
-	ctx := &context{
-		respPack: pack,
-		values: &values{
-			InputMaps: make([]map[string]interface{}, 0),
-		},
-	}
-	err := setData(ctx, pack.Content)
-	if err != nil {
-		return nil, err
-	}
-	return ctx, nil
-}
-
-func newContentByNotice(pack easyCon.PackNotice) (*context, error) {
-	ctx := &context{
-		noticePack: pack,
-		values: &values{
-			InputMaps: make([]map[string]interface{}, 0),
-		},
-	}
-	err := setData(ctx, pack.Content)
-	if err != nil {
-		return nil, err
-	}
-	return ctx, nil
-}
-
-func newContentByData(value any) (*context, error) {
+func NewContent(value any, reqPack *easyCon.PackReq, noticePack *easyCon.PackNotice) (IContext, error) {
 	ctx := &context{
 		values: &values{
 			InputMaps: make([]map[string]interface{}, 0),
 		},
+		pack: CommPack{},
 	}
 	err := setData(ctx, value)
 	if err != nil {
 		return nil, err
+	}
+	if reqPack != nil {
+		ctx.pack.Id = reqPack.Id
+		ctx.pack.From = reqPack.From
+		ctx.pack.To = reqPack.To
+	}
+	if noticePack != nil {
+		ctx.pack.Id = noticePack.Id
+		ctx.pack.From = noticePack.From
 	}
 	return ctx, nil
 }
@@ -159,9 +153,9 @@ func (c *context) GetBool(key string) bool {
 	return false
 }
 
-func (c *context) GetDate(key string) qdefine.Date {
+func (c *context) GetDate(key string) qtime.Date {
 	model := struct {
-		Time qdefine.Date
+		Time qtime.Date
 	}{}
 	js := fmt.Sprintf("{\"Time\":\"%s\"}", c.GetString(key))
 	err := json.Unmarshal([]byte(js), &model)
@@ -171,9 +165,9 @@ func (c *context) GetDate(key string) qdefine.Date {
 	return model.Time
 }
 
-func (c *context) GetDateTime(key string) qdefine.DateTime {
+func (c *context) GetDateTime(key string) qtime.DateTime {
 	model := struct {
-		Time qdefine.DateTime
+		Time qtime.DateTime
 	}{}
 	js := fmt.Sprintf("{\"Time\":\"%s\"}", c.GetString(key))
 	err := json.Unmarshal([]byte(js), &model)
@@ -183,10 +177,10 @@ func (c *context) GetDateTime(key string) qdefine.DateTime {
 	return model.Time
 }
 
-func (c *context) GetFiles(key string) []qdefine.File {
+func (c *context) GetFiles(key string) []File {
 	value := c.values.getValue(key)
 	// 返回
-	if files, ok := value.([]qdefine.File); ok {
+	if files, ok := value.([]File); ok {
 		return files
 	}
 	return nil
@@ -215,6 +209,10 @@ func (c *context) GetStruct(key string, refStruct any) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (c *context) GetCommPack() CommPack {
+	return c.pack
 }
 
 func (c *context) Raw() any {
