@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/kamioair/utils/qconfig"
 	"github.com/kamioair/utils/qio"
-	"github.com/spf13/viper"
 	"os"
 	"strings"
 )
@@ -47,8 +46,20 @@ func loadConfig(name, desc, version string, config IConfig) {
 		panic(err)
 	}
 
-	// 加载值
+	// 加载初始值
 	baseCfg = initBaseConfig(name, desc, version, config)
+
+	// 使用统一的配置加载方法
+	configs := map[string]interface{}{
+		"Base": baseCfg,
+		name:   config,
+	}
+
+	// 加载配置
+	err = qconfig.LoadConfig(baseCfg.filePath, configs)
+	if err != nil {
+		panic(err)
+	}
 
 	// 生成配置内容字符串
 	configBase := map[string]any{}
@@ -94,57 +105,30 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 		Retry:   3,
 		LogMode: "NONE",
 	}
-	// 如果有入参，则用入参
+
+	// 如果有入参，则用入参（仅处理ConfigPath，其他参数在loadConfig中处理）
 	if len(os.Args) > 1 {
 		args := map[string]string{}
 		err := json.Unmarshal([]byte(os.Args[1]), &args)
 		if err != nil {
 			panic(err)
 		}
+		// 自定义配置文件路径
 		if val, ok := args["ConfigPath"]; ok {
 			config.filePath = val
 		}
+		// 自定义模块名称
 		if val, ok := args["Module"]; ok && val != "" {
-			config.module = val
+			baseCfg.module = val
 		}
+		// 自定义Broker配置
 		if val, ok := args["Broker"]; ok {
-			// 用于网络发现
-			err = json.Unmarshal([]byte(val), &config.Broker)
+			err = json.Unmarshal([]byte(val), &baseCfg.Broker)
 			if err != nil {
 				panic(err)
 			}
 		}
 	}
-	// 如果配置文件不存在，则生成一个空的配置文件
-	if qio.PathExists(config.filePath) == false {
-		err := qio.WriteString(config.filePath, "", false)
-		if err != nil {
-			panic(err)
-		}
-	}
 
-	// 初始化 Viper
-	viper.SetConfigFile(config.filePath)
-	viper.SetConfigType("yaml")
-	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("无法读取配置文件: %v", err))
-	}
-	// 从文件中读取值
-	setModule("Base", config)
-	setModule(config.module, c)
 	return config
-}
-
-func setModule(name string, model any) {
-	value := viper.Get(name)
-	if value == nil {
-		return
-	}
-	js, err := json.Marshal(value)
-	if err == nil {
-		err = json.Unmarshal(js, model)
-		if err != nil {
-			return
-		}
-	}
 }
