@@ -100,6 +100,9 @@ func (m *module) start() {
 		m.reg.OnInit()
 	}
 
+	// 保存配置文件
+	saveConfigFile()
+
 	if setting.LogMode == easyCon.ELogModeConsole {
 		fmt.Println("")
 	}

@@ -6,7 +6,6 @@ import (
 	"github.com/kamioair/utils/qconfig"
 	"github.com/kamioair/utils/qio"
 	"os"
-	"strings"
 )
 
 type IConfig interface {
@@ -29,14 +28,19 @@ type Config struct {
 	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀"` // 服务连接配置
 }
 
-var baseCfg *Config
+var (
+	baseCfg       *Config
+	configForSave map[string]interface{} // 用于保存配置的全局变量
+)
 
-func (c *Config) getBaseConfig() *Config {
-	return c
-}
-
+// GetModuleInfo 获取基础配置（给外部用）
 func (c *Config) GetModuleInfo() (Name string, Desc string, Version string) {
 	return c.module, c.desc, c.version
+}
+
+// getBaseConfig 获取基础配置（供内部module.go调用）
+func (c *Config) getBaseConfig() *Config {
+	return c
 }
 
 func loadConfig(name, desc, version string, config IConfig) {
@@ -50,37 +54,16 @@ func loadConfig(name, desc, version string, config IConfig) {
 	baseCfg = initBaseConfig(name, desc, version, config)
 
 	// 使用统一的配置加载方法
-	configs := map[string]interface{}{
+	configForSave = map[string]interface{}{
 		"Base": baseCfg,
 		name:   config,
 	}
 
 	// 加载配置
-	err = qconfig.LoadConfig(baseCfg.filePath, configs)
+	err = qconfig.LoadConfig(baseCfg.filePath, configForSave)
 	if err != nil {
 		panic(err)
 	}
-
-	// 生成配置内容字符串
-	configBase := map[string]any{}
-	configBase["Base"] = baseCfg
-	configModule := map[string]any{}
-	configModule[baseCfg.module] = config
-	newCfg := ""
-	newCfg += "############################### Base Config ###############################\n"
-	newCfg += "# 通用基础配置\n"
-	newCfg += qconfig.ToYAML(configBase, 0, []string{})
-
-	mCfg := fmt.Sprintf("############################### %s Config ###############################\n", baseCfg.module)
-	mCfg += fmt.Sprintf("# %s\n", baseCfg.desc)
-	mCfg += qconfig.ToYAML(configModule, 0, []string{"Config"})
-	if strings.HasSuffix(mCfg, fmt.Sprintf("%s: \n", baseCfg.module)) == false {
-		newCfg += "\n\n"
-		newCfg += mCfg
-	}
-
-	// 尝试检测是否有变化，如果有则更新文件
-	qconfig.TrySave(baseCfg.filePath, newCfg)
 }
 
 func initBaseConfig(name, desc, version string, c IConfig) *Config {
@@ -131,4 +114,24 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 	}
 
 	return config
+}
+
+// saveConfigFile 保存配置文件（供内部module.go调用）
+func saveConfigFile() {
+	if baseCfg == nil || configForSave == nil {
+		return
+	}
+
+	// 准备保存选项
+	opts := qconfig.SaveConfigOptions{
+		SectionDescs: map[string]string{
+			baseCfg.module: baseCfg.desc,
+		},
+	}
+
+	// 保存配置
+	err := qconfig.SaveConfig(baseCfg.filePath, configForSave, &opts)
+	if err != nil {
+		fmt.Printf("保存配置文件失败: %v\n", err)
+	}
 }
