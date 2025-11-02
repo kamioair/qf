@@ -29,8 +29,7 @@ type Config struct {
 }
 
 var (
-	baseCfg       *Config
-	configForSave map[string]interface{} // 用于保存配置的全局变量
+	baseCfg *Config
 )
 
 // GetModuleInfo 获取基础配置（给外部用）
@@ -53,14 +52,12 @@ func loadConfig(name, desc, version string, config IConfig) {
 	// 加载初始值
 	baseCfg = initBaseConfig(name, desc, version, config)
 
-	// 使用统一的配置加载方法
-	configForSave = map[string]interface{}{
-		"Base": baseCfg,
-		name:   config,
-	}
-
 	// 加载配置
-	err = qconfig.LoadConfig(baseCfg.filePath, configForSave)
+	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
+	if err != nil {
+		panic(err)
+	}
+	err = qconfig.LoadConfig(baseCfg.filePath, name, config)
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +115,7 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 
 // saveConfigFile 保存配置文件（供内部module.go调用）
 func saveConfigFile() {
-	if baseCfg == nil || configForSave == nil {
+	if baseCfg == nil {
 		return
 	}
 
@@ -130,7 +127,7 @@ func saveConfigFile() {
 	}
 
 	// 保存配置
-	err := qconfig.SaveConfig(baseCfg.filePath, configForSave, &opts)
+	err := qconfig.SaveConfig(baseCfg.filePath, &opts)
 	if err != nil {
 		fmt.Printf("保存配置文件失败: %v\n", err)
 	}
