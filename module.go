@@ -20,6 +20,7 @@ type IModule interface {
 	Stop()
 }
 
+// NewModule 创建模块
 func NewModule(name, desc, version string, service IService, config IConfig) IModule {
 	if service == nil {
 		panic(errors.New("service cannot be nil"))
@@ -43,10 +44,12 @@ type module struct {
 	adapter easyCon.IAdapter
 }
 
+// Run 运行模块
 func (m *module) Run() {
 	qlauncher.Run(m.start, m.stop, false)
 }
 
+// Stop 停止模块
 func (m *module) Stop() {
 	qlauncher.Exit()
 }
@@ -89,6 +92,9 @@ func (m *module) start() {
 	setting.PreFix = cfg.Broker.Prefix
 	setting.OnExiting = m.onExiting
 	setting.OnGetVersion = m.onGetVersion
+	if m.reg.OnLog != nil {
+		setting.OnLog = m.reg.OnLog
+	}
 	m.adapter = easyCon.NewMqttAdapter(setting)
 	// 等待确保连接成功
 	time.Sleep(time.Millisecond * 100)

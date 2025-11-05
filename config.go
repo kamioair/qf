@@ -6,6 +6,9 @@ import (
 	"github.com/kamioair/utils/qconfig"
 	"github.com/kamioair/utils/qio"
 	"os"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 type IConfig interface {
@@ -17,6 +20,7 @@ type Config struct {
 	desc     string // 模块服务描述
 	version  string // 模块服务版本
 	filePath string // 配置文件路径
+	exit     string // 检查进程退出
 	Broker   struct {
 		Addr    string // 地址
 		UId     string // 用户名
@@ -42,6 +46,7 @@ func (c *Config) getBaseConfig() *Config {
 	return c
 }
 
+// loadConfig 加载配置文件
 func loadConfig(name, desc, version string, config IConfig) {
 	// 修改系统路径为当前目录
 	err := os.Chdir(qio.GetCurrentDirectory())
@@ -49,20 +54,23 @@ func loadConfig(name, desc, version string, config IConfig) {
 		panic(err)
 	}
 
-	// 加载初始值
+	// 加载基础配置
 	baseCfg = initBaseConfig(name, desc, version, config)
-
-	// 加载配置
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
 		panic(err)
 	}
+	// 如果有外部传入参数，则更新配置
+	setByArgs(baseCfg)
+
+	// 加载模块自定义配置
 	err = qconfig.LoadConfig(baseCfg.filePath, name, config)
 	if err != nil {
 		panic(err)
 	}
 }
 
+// initBaseConfig 初始化基础默认配置
 func initBaseConfig(name, desc, version string, c IConfig) *Config {
 	config := c.getBaseConfig()
 	config.module = name
@@ -86,6 +94,11 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 		LogMode: "NONE",
 	}
 
+	return config
+}
+
+// setByArgs 根据外部传参更新基础配置
+func setByArgs(config *Config) {
 	// 如果有入参，则用入参（仅处理ConfigPath，其他参数在loadConfig中处理）
 	if len(os.Args) > 1 {
 		args := map[string]string{}
@@ -109,8 +122,45 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 			}
 		}
 	}
+	// 其他扩展参数
+	if len(os.Args) > 2 {
+		args := map[string]string{}
+		for i := 2; i < len(os.Args); i += 2 {
+			if i+1 >= len(os.Args) {
+				break
+			}
+			key := os.Args[i]
+			value := os.Args[i+1]
+			args[key] = value
+		}
+		for key, value := range args {
+			switch key {
+			case "-exit":
+				config.exit = value
+			case "-port":
+				// 重新设置端口
+				port, _ := strconv.Atoi(value)
+				a1, a2, a3, e := splitWebSocketURLRegex(config.Broker.Addr)
+				if e == nil && strings.Contains(a2, ":") {
+					sp := strings.Split(a2, ":")
+					config.Broker.Addr = fmt.Sprintf("%s%s:%d%s", a1, sp[0], port, a3)
+				}
+			}
+		}
+	}
+}
 
-	return config
+// splitWebSocketURLRegex 拆分broker连接地址
+func splitWebSocketURLRegex(url string) (string, string, string, error) {
+	pattern := `^(.+://)([^/]+)(/.+)$`
+	re := regexp.MustCompile(pattern)
+
+	matches := re.FindStringSubmatch(url)
+	if len(matches) != 4 {
+		return "", "", "", fmt.Errorf("invalid URL format")
+	}
+
+	return matches[1], matches[2], matches[3], nil
 }
 
 // saveConfigFile 保存配置文件（供内部module.go调用）

@@ -32,6 +32,7 @@ type Reg struct {
 	OnNotice        func(notice easyCon.PackNotice)
 	OnRetainNotice  func(notice easyCon.PackNotice)
 	OnStatusChanged func(status easyCon.EStatus)
+	OnLog           func(log easyCon.PackLog)
 }
 
 type OnReqFunc func(ctx IContext) (any, error)
@@ -70,7 +71,8 @@ func (bll *Service) ReturnOk(content any) (code easyCon.EResp, resp any) {
 }
 
 func (bll *Service) ReturnErr(content any) (code easyCon.EResp, resp any) {
-	return easyCon.ERespError, content
+	js, _ := json.Marshal(content)
+	return easyCon.ERespError, errors.New(string(js))
 }
 
 func (bll *Service) ReturnNotFind() (code easyCon.EResp, resp any) {
