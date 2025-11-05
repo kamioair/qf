@@ -34,6 +34,7 @@ func NewModule(name, desc, version string, service IService, config IConfig) IMo
 		service: service,
 		config:  config,
 	}
+	instance = service
 	return m
 }
 

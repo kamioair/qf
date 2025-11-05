@@ -7,10 +7,15 @@ import (
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"github.com/robfig/cron/v3"
 	"net"
+	"time"
 )
 
 type IService interface {
 	Reg(reg *Reg) // 注册事件
+
+	SendLogDebug(content string) // 日志
+	SendLogWarn(content string)
+	SendLogError(content string, err error)
 
 	// 内部使用的方法
 	stop()
@@ -126,6 +131,7 @@ func (bll *Service) SendRetainNotice(route string, content any) {
 
 // SendLogDebug 发送Debug日志
 func (bll *Service) SendLogDebug(content string) {
+	fmt.Println(fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), content))
 	bll.adapter.Debug(content)
 	bll.writeLog("Debug", content, "")
 }
