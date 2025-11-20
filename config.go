@@ -54,6 +54,8 @@ func loadConfig(name, desc, version string, config IConfig) {
 		panic(err)
 	}
 
+	fileExist := qio.PathExists(baseCfg.filePath)
+
 	// 加载基础配置
 	baseCfg = initBaseConfig(name, desc, version, config)
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
@@ -67,6 +69,11 @@ func loadConfig(name, desc, version string, config IConfig) {
 	err = qconfig.LoadConfig(baseCfg.filePath, name, config)
 	if err != nil {
 		panic(err)
+	}
+
+	// 首次创建配置文件，立即保存
+	if fileExist == false {
+		saveConfigFile()
 	}
 }
 
