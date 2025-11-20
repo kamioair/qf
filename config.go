@@ -54,10 +54,9 @@ func loadConfig(name, desc, version string, config IConfig) {
 		panic(err)
 	}
 
-	fileExist := qio.PathExists(baseCfg.filePath)
-
 	// 加载基础配置
 	baseCfg = initBaseConfig(name, desc, version, config)
+	fileExist := qio.PathExists(baseCfg.filePath)
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
 		panic(err)
