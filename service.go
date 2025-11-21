@@ -104,7 +104,7 @@ func (bll *Service) SendRequest(module, route string, params any) (any, error) {
 	if resp.RespCode == easyCon.ERespSuccess {
 		return resp.Content, nil
 	}
-	err := errors.New(fmt.Sprintf("%s %s%s", resp.RespCode, resp.Content, resp.Error))
+	err := errors.New(fmt.Sprintf("%d %s %s", resp.RespCode, resp.Content, resp.Error))
 	// 记录日志
 	str, _ := json.Marshal(params)
 	bll.SendLogError(fmt.Sprintf("SendRequest To %s.%s Error InParams=%s", module, route, string(str)), err)

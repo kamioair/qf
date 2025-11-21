@@ -156,7 +156,14 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		return easyCon.ERespSuccess, ver
 	}
 	if m.reg.OnReq != nil {
-		return m.reg.OnReq(pack)
+		code, resp = m.reg.OnReq(pack)
+		if code != easyCon.ERespSuccess {
+			// 记录日志
+			str, _ := json.Marshal(pack)
+			errStr, _ := json.Marshal(resp)
+			m.writeLog("Error", fmt.Sprintf("OnReq InParam=%s", str), string(errStr))
+		}
+		return code, resp
 	}
 	return easyCon.ERespRouteNotFind, "Route Not Matched"
 }
