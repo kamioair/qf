@@ -95,14 +95,10 @@ func (bll *Service) CreateCron() ICron {
 }
 
 // SendRequest 发送请求
-func (bll *Service) SendRequest(module, route string, params any) (any, error) {
+func (bll *Service) SendRequest(module, route string, params any) (IContext, error) {
 	resp := bll.adapter.Req(module, route, params)
-	switch resp.RespCode {
-	case easyCon.ERespSuccess:
-		return resp.Content, nil
-	}
 	if resp.RespCode == easyCon.ERespSuccess {
-		return resp.Content, nil
+		return NewContent(resp.Content, &resp.PackReq, nil)
 	}
 	err := errors.New(fmt.Sprintf("%d %s %s", resp.RespCode, resp.Content, resp.Error))
 	// 记录日志
