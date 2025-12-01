@@ -105,26 +105,31 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 
 // setByArgs 根据外部传参更新基础配置
 func setByArgs(config *Config) {
+	defer func() {
+		if r := recover(); r != nil {
+
+		}
+	}()
+
 	// 如果有入参，则用入参（仅处理ConfigPath，其他参数在loadConfig中处理）
 	if len(os.Args) > 1 {
-		args := map[string]string{}
+		args := map[string]any{}
 		err := json.Unmarshal([]byte(os.Args[1]), &args)
-		if err != nil {
-			panic(err)
-		}
-		// 自定义配置文件路径
-		if val, ok := args["ConfigPath"]; ok {
-			config.filePath = val
-		}
-		// 自定义模块名称
-		if val, ok := args["Module"]; ok && val != "" {
-			baseCfg.module = val
-		}
-		// 自定义Broker配置
-		if val, ok := args["Broker"]; ok {
-			err = json.Unmarshal([]byte(val), &baseCfg.Broker)
-			if err != nil {
-				panic(err)
+		if err == nil {
+			// 自定义配置文件路径
+			if val, ok := args["ConfigPath"]; ok {
+				config.filePath = val.(string)
+			}
+			// 自定义模块名称
+			if val, ok := args["Module"]; ok && val != "" {
+				baseCfg.module = val.(string)
+			}
+			// 自定义Broker配置
+			if val, ok := args["Broker"]; ok {
+				err = json.Unmarshal([]byte(val.(string)), &baseCfg.Broker)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 	}

@@ -37,6 +37,7 @@ type IContext interface {
 	GetStruct(key string, refStruct any)
 	GetCommPack() CommPack
 	Raw() any
+	Json() string
 }
 
 type context struct {
@@ -217,6 +218,14 @@ func (c *context) GetCommPack() CommPack {
 
 func (c *context) Raw() any {
 	return c.values.InputRaw
+}
+
+func (c *context) Json() string {
+	js, err := json.Marshal(c.values.InputRaw)
+	if err != nil {
+		panic(err)
+	}
+	return string(js)
 }
 
 func (d *values) load(content []byte) error {

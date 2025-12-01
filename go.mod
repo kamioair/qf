@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/gobeam/stringy v0.0.7
-	github.com/kamioair/utils v0.0.10
+	github.com/kamioair/utils v0.0.11
 	github.com/qiu-tec/easy-con.golang v0.3.0
 	github.com/robfig/cron/v3 v3.0.1
 )
