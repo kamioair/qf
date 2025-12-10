@@ -51,7 +51,7 @@ type Service struct {
 	writeLog func(level string, content string, err string)
 }
 
-func (b *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, any) {
+func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, any) {
 	ctx, err := NewContent(pack.Content, &pack, nil)
 	if err != nil {
 		return easyCon.ERespBadReq, err
@@ -63,10 +63,10 @@ func (b *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, 
 	return easyCon.ERespSuccess, res
 }
 
-func (b *Service) NoticeInvoke(pack easyCon.PackNotice, onReq OnNoticeFunc) {
+func (bll *Service) NoticeInvoke(pack easyCon.PackNotice, onReq OnNoticeFunc) {
 	ctx, err := NewContent(pack.Content, nil, &pack)
 	if err != nil {
-		b.SendLogError(fmt.Sprintln("NoticeInvoke build invoke error", pack), err)
+		bll.SendLogError(fmt.Sprintln("NoticeInvoke build invoke error", pack), err)
 	}
 	onReq(ctx)
 }
@@ -100,10 +100,10 @@ func (bll *Service) SendRequest(module, route string, params any) (IContext, err
 	if resp.RespCode == easyCon.ERespSuccess {
 		return NewContent(resp.Content, &resp.PackReq, nil)
 	}
-	err := errors.New(fmt.Sprintf("%d %s %s", resp.RespCode, resp.Content, resp.Error))
 	// 记录日志
 	str, _ := json.Marshal(params)
-	bll.SendLogError(fmt.Sprintf("SendRequest To %s.%s Error InParams=%s", module, route, string(str)), err)
+	err := errors.New(formatRespError(resp.RespCode, resp.Error))
+	bll.SendLogError(fmt.Sprintf("[SendRequest To %s.%s] InParams=%s", module, route, string(str)), err)
 	return nil, err
 }
 
@@ -112,7 +112,7 @@ func (bll *Service) SendNotice(route string, content any) {
 	err := bll.adapter.SendNotice(route, content)
 	if err != nil {
 		str, _ := json.Marshal(content)
-		bll.SendLogError(fmt.Sprintf("SendNotice To %s Error InParams=%s", route, string(str)), err)
+		bll.SendLogError(fmt.Sprintf("[SendNotice To %s] InParams=%s", route, string(str)), err)
 	}
 }
 
@@ -121,7 +121,7 @@ func (bll *Service) SendRetainNotice(route string, content any) {
 	err := bll.adapter.SendRetainNotice(route, content)
 	if err != nil {
 		str, _ := json.Marshal(content)
-		bll.SendLogError(fmt.Sprintf("SendRetainNotice To %s Error InParams=%s", route, string(str)), err)
+		bll.SendLogError(fmt.Sprintf("[SendRetainNotice To %s] InParams=%s", route, string(str)), err)
 	}
 }
 
@@ -141,7 +141,11 @@ func (bll *Service) SendLogWarn(content string) {
 // SendLogError 发送Error日志
 func (bll *Service) SendLogError(content string, err error) {
 	bll.adapter.Err(content, err)
-	bll.writeLog("Error", content, "")
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+	bll.writeLog("Error", content, errStr)
 }
 
 func (bll *Service) stop() {

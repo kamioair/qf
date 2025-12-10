@@ -16,7 +16,11 @@ import (
 )
 
 type IModule interface {
+	// Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
 	Run()
+	// RunAsync 异步运行模块，执行后不等待，单进程需要启动多模块时使用（dll模式）
+	RunAsync()
+	// Stop 停止模块
 	Stop()
 }
 
@@ -39,20 +43,33 @@ func NewModule(name, desc, version string, service IService, config IConfig) IMo
 }
 
 type module struct {
-	service IService
-	reg     *Reg
-	config  IConfig
-	adapter easyCon.IAdapter
+	service         IService
+	reg             *Reg
+	config          IConfig
+	adapter         easyCon.IAdapter
+	waitConnectChan chan bool
+	asyncRun        bool
 }
 
-// Run 运行模块
+// Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
 func (m *module) Run() {
 	qlauncher.Run(m.start, m.stop, false)
 }
 
+// RunAsync 异步运行模块，执行后不等待，单进程需要启动多模块时使用（dll模式）
+func (m *module) RunAsync() {
+	m.asyncRun = true
+	m.start()
+}
+
 // Stop 停止模块
 func (m *module) Stop() {
-	qlauncher.Exit()
+	if m.asyncRun {
+		// 异步允许，则直接退出
+		m.stop()
+	} else {
+		qlauncher.Exit()
+	}
 }
 
 func (m *module) start() {
@@ -61,6 +78,8 @@ func (m *module) start() {
 		fmt.Println(err)
 		fmt.Println("-------------------------------------")
 	})
+
+	m.waitConnectChan = make(chan bool)
 
 	cfg := m.config.getBaseConfig()
 	fmt.Println("-------------------------------------")
@@ -93,16 +112,31 @@ func (m *module) start() {
 	setting.PreFix = cfg.Broker.Prefix
 	setting.OnExiting = m.onExiting
 	setting.OnGetVersion = m.onGetVersion
+	setting.IsRandomClientID = cfg.Broker.IsRandomClientID
+	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
+	if cfg.Broker.IsSyncMode {
+		setting.EProtocol = easyCon.EProtocolMQTTSync
+	}
 	if m.reg.OnLog != nil {
 		setting.OnLog = m.reg.OnLog
 	}
 	m.adapter = easyCon.NewMqttAdapter(setting)
-	// 等待确保连接成功
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(time.Millisecond * 1)
+	if cfg.Broker.LinkTimeOut > 0 {
+		// 等待连接成功
+		select {
+		case <-m.waitConnectChan:
+			break
+		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
+			// 连接超时，也继续
+			break
+		}
+	}
 
 	// 调用业务的初始化
 	m.service.setAdapter(m.adapter)
 
+	// 调用业务的初始化
 	if m.reg.OnInit != nil {
 		m.reg.OnInit()
 	}
@@ -139,7 +173,7 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		code = easyCon.ERespError
 		resp = errors.New(err)
 		// 记录日志
-		str, _ := json.Marshal(pack)
+		str, _ := json.Marshal(pack.Content)
 		m.writeLog("Error", fmt.Sprintf("OnReq InParam=%s", str), err)
 	})
 	switch pack.Route {
@@ -159,9 +193,14 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		code, resp = m.reg.OnReq(pack)
 		if code != easyCon.ERespSuccess {
 			// 记录日志
-			str, _ := json.Marshal(pack)
-			errStr, _ := json.Marshal(resp)
-			m.writeLog("Error", fmt.Sprintf("OnReq InParam=%s", str), string(errStr))
+			str, _ := json.Marshal(pack.Content)
+			errStr := ""
+			if e := resp.(error); e != nil {
+				errStr = e.Error()
+			} else {
+				errStr = fmt.Sprintf("%v", resp)
+			}
+			m.writeLog("Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
 		}
 		return code, resp
 	}
@@ -169,6 +208,11 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 }
 
 func (m *module) onState(status easyCon.EStatus) {
+	if status == easyCon.EStatusLinked {
+		// 连接成功
+		m.waitConnectChan <- true
+		close(m.waitConnectChan)
+	}
 	if m.reg.OnStatusChanged != nil {
 		m.reg.OnStatusChanged(status)
 	}
@@ -220,16 +264,16 @@ func (m *module) formatStack(name string, row string) string {
 func (m *module) writeLog(level string, content string, err string) {
 	baseCfg := m.config.getBaseConfig()
 	now := time.Now()
-	temp := "{Time} [{Level}] {Content} {Error}"
+	temp := "{Time} [{Level}] {Error} {Content}"
 	log := strings.Replace(temp, "{Time}", qconvert.Time.ToString(now, "yyyy-MM-dd HH:mm:ss"), 1)
 	log = strings.Replace(log, "{Level}", level, 1)
-	log = strings.Replace(log, "{Content}", content, 1)
 	log = strings.Replace(log, "{Error}", err, 1)
+	log = strings.Replace(log, "{Content}", content, 1)
 	ym := qconvert.Time.ToString(now, "yyyy-MM")
 	day := qconvert.Time.ToString(now, "dd")
-	logFile := fmt.Sprintf("%s/%s/%s_%s_%s.log", "./log", ym, day, baseCfg.module, "Error")
+	logFile := fmt.Sprintf("%s/%s/%s_%s_%s.log", "./log", ym, day, baseCfg.module, level)
 	logFile = qio.GetFullPath(logFile)
-	_ = qio.WriteString(logFile, log, true)
+	_ = qio.WriteString(logFile, log+"\n", true)
 }
 
 func (m *module) onGetVersion() []string {

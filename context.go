@@ -279,3 +279,22 @@ func (d *values) getValue(key string) interface{} {
 	}
 	return value
 }
+
+func formatRespError(respCode easyCon.EResp, errStr string) string {
+	respDesc := fmt.Sprintf("%d", respCode)
+	switch respCode {
+	case easyCon.ERespUnLinked:
+		respDesc = "UnLinked"
+	case easyCon.ERespSuccess:
+		respDesc = "Success"
+	case easyCon.ERespBadReq:
+		respDesc = "BadReq"
+	case easyCon.ERespRouteNotFind:
+		respDesc = "RouteNotFind"
+	case easyCon.ERespError:
+		respDesc = "Error"
+	case easyCon.ERespTimeout:
+		respDesc = "Timeout"
+	}
+	return fmt.Sprintf("RespCode=%d(%s), Error=%s", respCode, respDesc, errStr)
+}

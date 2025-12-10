@@ -22,14 +22,17 @@ type Config struct {
 	filePath string // 配置文件路径
 	exit     string // 检查进程退出
 	Broker   struct {
-		Addr    string // 地址
-		UId     string // 用户名
-		Pwd     string // 密码
-		TimeOut int    // 连接超时
-		Retry   int    // 重试次数
-		LogMode string // 日志模式
-		Prefix  string // 前缀
-	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀"` // 服务连接配置
+		Addr             string // 地址
+		UId              string // 用户名
+		Pwd              string // 密码
+		TimeOut          int    // 连接超时
+		Retry            int    // 重试次数
+		LogMode          string // 日志模式
+		Prefix           string // 前缀
+		LinkTimeOut      int    // 连接等待时间
+		IsRandomClientID bool   // 是否随机clientID
+		IsSyncMode       bool   // 是否同步模式
+	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:请求超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀，用于同一个模块不同实例\n LinkTimeOut:连接等待超时(毫秒) 0表示无限等待直到连上\n IsRandomClientID:是否随机clientID\n IsSyncMode:是否请求同步模式，启用后所有请求无法并行，只能一个一个执行"` // 服务连接配置
 }
 
 var (
@@ -84,20 +87,26 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 	config.version = version
 	config.filePath = "./config.yaml"
 	config.Broker = struct {
-		Addr    string // 地址
-		UId     string // 用户名
-		Pwd     string // 密码
-		TimeOut int    // 连接超时
-		Retry   int    // 重试次数
-		LogMode string // 日志模式
-		Prefix  string // 前缀
+		Addr             string // 地址
+		UId              string // 用户名
+		Pwd              string // 密码
+		TimeOut          int    // 连接超时
+		Retry            int    // 重试次数
+		LogMode          string // 日志模式
+		Prefix           string // 前缀
+		LinkTimeOut      int    // 连接等待时间
+		IsRandomClientID bool   // 是否随机clientID
+		IsSyncMode       bool
 	}{
-		Addr:    "ws://127.0.0.1:5002/ws",
-		UId:     "",
-		Pwd:     "",
-		TimeOut: 3000,
-		Retry:   3,
-		LogMode: "NONE",
+		Addr:             "ws://127.0.0.1:5002/ws",
+		UId:              "",
+		Pwd:              "",
+		TimeOut:          3000,
+		Retry:            3,
+		LogMode:          "NONE",
+		LinkTimeOut:      1000,
+		IsRandomClientID: false,
+		IsSyncMode:       false,
 	}
 
 	return config
