@@ -19,25 +19,41 @@ type File struct {
 }
 
 type CommPack struct {
-	Id   uint64
-	From string
-	To   string
+	Id       uint64
+	From     string
+	To       string
+	ReqTime  string
+	RespTime string
 }
 
 // IContext 上下文
 type IContext interface {
+	// GetString 获取指定属性名称的字符串值
 	GetString(key string) string
+	// GetInt 获取指定属性名称的整数值
 	GetInt(key string) int
+	// GetUInt 获取指定属性名称的无符号整数值
 	GetUInt(key string) uint64
+	// GetUInt32 获取指定属性名称的无符号32位整数值
+	GetUInt32(key string) uint32
+	// GetByte 获取指定属性名称的字节
 	GetByte(key string) byte
+	// GetBool 获取指定属性名称的布尔值
 	GetBool(key string) bool
+	// GetDate 获取指定属性名称的日期
 	GetDate(key string) qtime.Date
+	// GetDateTime 获取指定属性名称的日期时间
 	GetDateTime(key string) qtime.DateTime
+	// GetFiles 获取指定属性名称的文件
 	GetFiles(key string) []File
-	GetStruct(key string, refStruct any)
+	// GetCommPack 获取通讯包参数
 	GetCommPack() CommPack
+	// Raw 获取原始结构体
 	Raw() any
+	// Json 获取原始结构体的json
 	Json() string
+	// BindStruct 将请求数据绑定到指定结构体
+	BindStruct(refStruct any) any
 }
 
 type context struct {
@@ -51,7 +67,12 @@ type values struct {
 	OutputValue interface{}
 }
 
-func NewContent(value any, reqPack *easyCon.PackReq, noticePack *easyCon.PackNotice) (IContext, error) {
+// NewContent 创建上下文
+func NewContent(value any) (IContext, error) {
+	return newContent(value, nil, nil, nil)
+}
+
+func newContent(value any, reqPack *easyCon.PackReq, respPack *easyCon.PackResp, noticePack *easyCon.PackNotice) (IContext, error) {
 	ctx := &context{
 		values: &values{
 			InputMaps: make([]map[string]interface{}, 0),
@@ -66,6 +87,14 @@ func NewContent(value any, reqPack *easyCon.PackReq, noticePack *easyCon.PackNot
 		ctx.pack.Id = reqPack.Id
 		ctx.pack.From = reqPack.From
 		ctx.pack.To = reqPack.To
+		ctx.pack.ReqTime = reqPack.ReqTime
+	}
+	if respPack != nil {
+		ctx.pack.Id = respPack.Id
+		ctx.pack.From = respPack.From
+		ctx.pack.To = respPack.To
+		ctx.pack.ReqTime = respPack.ReqTime
+		ctx.pack.RespTime = respPack.RespTime
 	}
 	if noticePack != nil {
 		ctx.pack.Id = noticePack.Id
@@ -80,6 +109,10 @@ func setData(ctx *context, data any) error {
 		switch data.(type) {
 		case string:
 			str := data.(string)
+			str = strings.TrimSpace(str)               // 去除首尾空白
+			str = strings.ReplaceAll(str, "\n", "\\n") // 转义换行
+			str = strings.ReplaceAll(str, "\r", "\\r") // 转义回车
+			str = strings.ReplaceAll(str, "\t", "\\t") // 转义制表符
 			if (strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}")) ||
 				strings.HasPrefix(str, "[") && strings.HasSuffix(str, "]") {
 				content = []byte(str)
@@ -138,6 +171,14 @@ func (c *context) GetUInt(key string) uint64 {
 	return num
 }
 
+func (c *context) GetUInt32(key string) uint32 {
+	num, err := strconv.ParseUint(c.GetString(key), 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	return uint32(num)
+}
+
 func (c *context) GetByte(key string) byte {
 	num, err := strconv.ParseInt(c.GetString(key), 10, 8)
 	if err != nil {
@@ -187,28 +228,44 @@ func (c *context) GetFiles(key string) []File {
 	return nil
 }
 
-func (c *context) GetStruct(key string, refStruct any) {
-	var val any
-
-	t := reflect.ValueOf(refStruct)
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
+func (c *context) BindStruct(refStruct any) any {
+	if c.values.InputRaw == nil {
+		return refStruct
 	}
-	if t.Kind() == reflect.Slice {
-		val = c.values.InputMaps
+
+	js, err := json.Marshal(c.values.InputRaw)
+	if err != nil {
+		panic(err)
+	}
+
+	v := reflect.ValueOf(refStruct)
+
+	// 处理nil指针
+	if v.Kind() == reflect.Ptr && v.IsNil() {
+		// 创建新指针
+		elemType := v.Type().Elem()
+		newPtr := reflect.New(elemType)
+		err = json.Unmarshal(js, newPtr.Interface())
+		if err != nil {
+			panic(err)
+		}
+		return newPtr.Interface()
+	}
+
+	// 正常处理
+	if v.Kind() == reflect.Ptr {
+		err = json.Unmarshal(js, refStruct)
+		if err != nil {
+			panic(err)
+		}
+		return refStruct
 	} else {
-		val = c.values.getValue(key)
-	}
-
-	// 先转为json
-	js, err := json.Marshal(val)
-	if err != nil {
-		panic(err)
-	}
-	// 再反转
-	err = json.Unmarshal(js, refStruct)
-	if err != nil {
-		panic(err)
+		ptr := reflect.New(v.Type())
+		err = json.Unmarshal(js, ptr.Interface())
+		if err != nil {
+			panic(err)
+		}
+		return ptr.Elem().Interface()
 	}
 }
 

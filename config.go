@@ -35,8 +35,14 @@ type Config struct {
 	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:请求超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀，用于同一个模块不同实例\n LinkTimeOut:连接等待超时(毫秒) 0表示无限等待直到连上\n IsRandomClientID:是否随机clientID\n IsSyncMode:是否请求同步模式，启用后所有请求无法并行，只能一个一个执行"` // 服务连接配置
 }
 
+type emptyConfig struct {
+	Config
+}
+
 var (
-	baseCfg *Config
+	opts = qconfig.SaveConfigOptions{
+		SectionDescs: map[string]string{},
+	}
 )
 
 // GetModuleInfo 获取基础配置（给外部用）
@@ -58,7 +64,7 @@ func loadConfig(name, desc, version string, config IConfig) {
 	}
 
 	// 加载基础配置
-	baseCfg = initBaseConfig(name, desc, version, config)
+	baseCfg := initBaseConfig(name, desc, version, config)
 	fileExist := qio.PathExists(baseCfg.filePath)
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
@@ -75,7 +81,7 @@ func loadConfig(name, desc, version string, config IConfig) {
 
 	// 首次创建配置文件，立即保存
 	if fileExist == false {
-		saveConfigFile()
+		saveConfigFile(baseCfg)
 	}
 }
 
@@ -131,11 +137,11 @@ func setByArgs(config *Config) {
 			}
 			// 自定义模块名称
 			if val, ok := args["Module"]; ok && val != "" {
-				baseCfg.module = val.(string)
+				config.module = val.(string)
 			}
 			// 自定义Broker配置
 			if val, ok := args["Broker"]; ok {
-				err = json.Unmarshal([]byte(val.(string)), &baseCfg.Broker)
+				err = json.Unmarshal([]byte(val.(string)), &config.Broker)
 				if err != nil {
 					panic(err)
 				}
@@ -184,20 +190,12 @@ func splitWebSocketURLRegex(url string) (string, string, string, error) {
 }
 
 // saveConfigFile 保存配置文件（供内部module.go调用）
-func saveConfigFile() {
-	if baseCfg == nil {
-		return
-	}
-
+func saveConfigFile(config *Config) {
 	// 准备保存选项
-	opts := qconfig.SaveConfigOptions{
-		SectionDescs: map[string]string{
-			baseCfg.module: baseCfg.desc,
-		},
-	}
+	opts.SectionDescs[config.module] = config.desc
 
 	// 保存配置
-	err := qconfig.SaveConfig(baseCfg.filePath, &opts)
+	err := qconfig.SaveConfig(config.filePath, &opts)
 	if err != nil {
 		fmt.Printf("保存配置文件失败: %v\n", err)
 	}

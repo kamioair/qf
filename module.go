@@ -31,6 +31,9 @@ func NewModule(name, desc, version string, service IService, config IConfig) IMo
 	}
 
 	// 加载配置
+	if config == nil {
+		config = &emptyConfig{}
+	}
 	loadConfig(name, desc, version, config)
 
 	// 创建基础模块
@@ -94,7 +97,7 @@ func (m *module) start() {
 	m.service.setConfig(m.config.getBaseConfig())
 	m.service.setWriteLog(m.writeLog)
 
-	fmt.Printf("Connecting Broker... (Addr: %s)\n\n", cfg.Broker.Addr)
+	fmt.Printf("Connecting Broker... (Addr: %s) ", cfg.Broker.Addr)
 	// 创建easyCon客户端
 	clientId := cfg.module
 	setting := easyCon.NewSetting(clientId, cfg.Broker.Addr, m.onReq, m.onState)
@@ -126,9 +129,11 @@ func (m *module) start() {
 		// 等待连接成功
 		select {
 		case <-m.waitConnectChan:
+			fmt.Printf("[Link]")
 			break
 		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
 			// 连接超时，也继续
+			fmt.Printf("[UnLink]")
 			break
 		}
 	}
@@ -142,13 +147,10 @@ func (m *module) start() {
 	}
 
 	// 保存配置文件
-	saveConfigFile()
+	saveConfigFile(cfg)
 
-	if setting.LogMode == easyCon.ELogModeConsole {
-		fmt.Println("")
-	}
-	fmt.Println("Start OK")
-	fmt.Println("-------------------------------------")
+	// 启动成功
+	fmt.Printf("\nStart OK\n\n")
 }
 
 func (m *module) stop() {

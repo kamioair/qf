@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	easyCon "github.com/qiu-tec/easy-con.golang"
-	"github.com/robfig/cron/v3"
 	"net"
 	"time"
 )
@@ -24,12 +23,6 @@ type IService interface {
 	setWriteLog(writeLog func(level string, content string, err string))
 }
 
-type ICron interface {
-	stop()
-	Add(cron string, mission func()) (missionId int)
-	Remove(missionId int)
-}
-
 type Reg struct {
 	OnInit          func()
 	OnStop          func()
@@ -45,14 +38,14 @@ type OnReqFunc func(ctx IContext) (any, error)
 type OnNoticeFunc func(ctx IContext)
 
 type Service struct {
-	cronList []ICron
 	adapter  easyCon.IAdapter
 	config   *Config
 	writeLog func(level string, content string, err string)
 }
 
+// Invoke 调用请求实现方法
 func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, any) {
-	ctx, err := NewContent(pack.Content, &pack, nil)
+	ctx, err := newContent(pack.Content, &pack, nil, nil)
 	if err != nil {
 		return easyCon.ERespBadReq, err
 	}
@@ -63,47 +56,54 @@ func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp
 	return easyCon.ERespSuccess, res
 }
 
+// NoticeInvoke 调用通知实现方法
 func (bll *Service) NoticeInvoke(pack easyCon.PackNotice, onReq OnNoticeFunc) {
-	ctx, err := NewContent(pack.Content, nil, &pack)
+	ctx, err := newContent(pack.Content, nil, nil, &pack)
 	if err != nil {
 		bll.SendLogError(fmt.Sprintln("NoticeInvoke build invoke error", pack), err)
 	}
 	onReq(ctx)
 }
 
+// ReturnOk 返回成功
 func (bll *Service) ReturnOk(content any) (code easyCon.EResp, resp any) {
 	return easyCon.ERespSuccess, content
 }
 
+// ReturnErr 返回错误
 func (bll *Service) ReturnErr(content any) (code easyCon.EResp, resp any) {
 	js, _ := json.Marshal(content)
 	return easyCon.ERespError, errors.New(string(js))
 }
 
+// ReturnNotFind 返回未找到
 func (bll *Service) ReturnNotFind() (code easyCon.EResp, resp any) {
 	return easyCon.ERespRouteNotFind, nil
-}
-
-// CreateCron 创建定时任务
-func (bll *Service) CreateCron() ICron {
-	crn := createCron()
-	if bll.cronList == nil {
-		bll.cronList = make([]ICron, 0)
-	}
-	bll.cronList = append(bll.cronList, crn)
-	return crn
 }
 
 // SendRequest 发送请求
 func (bll *Service) SendRequest(module, route string, params any) (IContext, error) {
 	resp := bll.adapter.Req(module, route, params)
 	if resp.RespCode == easyCon.ERespSuccess {
-		return NewContent(resp.Content, &resp.PackReq, nil)
+		return newContent(resp.Content, nil, &resp, nil)
 	}
 	// 记录日志
 	str, _ := json.Marshal(params)
 	err := errors.New(formatRespError(resp.RespCode, resp.Error))
 	bll.SendLogError(fmt.Sprintf("[SendRequest To %s.%s] InParams=%s", module, route, string(str)), err)
+	return nil, err
+}
+
+// SendRequestWithTimeout 发送请求(可自定义超时时间的,单位毫秒)
+func (bll *Service) SendRequestWithTimeout(module, route string, params any, timeout int) (IContext, error) {
+	resp := bll.adapter.ReqWithTimeout(module, route, params, timeout)
+	if resp.RespCode == easyCon.ERespSuccess {
+		return newContent(resp.Content, nil, &resp, nil)
+	}
+	// 记录日志
+	str, _ := json.Marshal(params)
+	err := errors.New(formatRespError(resp.RespCode, resp.Error))
+	bll.SendLogError(fmt.Sprintf("[SendRequestWithTimeout To %s.%s] Timeout=%d InParams=%s", module, route, timeout, string(str)), err)
 	return nil, err
 }
 
@@ -149,11 +149,7 @@ func (bll *Service) SendLogError(content string, err error) {
 }
 
 func (bll *Service) stop() {
-	if bll.cronList != nil {
-		for _, c := range bll.cronList {
-			c.stop()
-		}
-	}
+
 }
 
 func (bll *Service) setAdapter(adapter easyCon.IAdapter) {
@@ -197,37 +193,4 @@ func (bll *Service) getIp() string {
 
 	str, _ := json.Marshal(ips)
 	return string(str)
-}
-
-type cronStruct struct {
-	crn *cron.Cron
-}
-
-// createCron 创建定时任务
-func createCron() ICron {
-	crn := &cronStruct{
-		crn: cron.New(cron.WithSeconds()),
-	}
-	crn.crn.Start()
-	return crn
-}
-
-// Stop 停止定时任务
-func (crn *cronStruct) stop() {
-	crn.crn.Stop()
-}
-
-// Add 添加定时方法
-func (crn *cronStruct) Add(cron string, mission func()) (missionId int) {
-
-	iid, err := crn.crn.AddFunc(cron, mission)
-	if err != nil {
-		panic(err)
-	}
-	return int(iid)
-}
-
-// Remove 移除定时方法
-func (crn *cronStruct) Remove(missionId int) {
-	crn.crn.Remove(cron.EntryID(missionId))
 }
