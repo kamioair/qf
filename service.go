@@ -4,23 +4,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kamioair/utils/qio"
 	easyCon "github.com/qiu-tec/easy-con.golang"
-	"net"
 	"time"
 )
 
 type IService interface {
-	Reg(reg *Reg) // 注册事件
+	Reg(reg *Reg)     // 注册事件
+	GetInvokes() *Reg // 返回注册事件
 
-	SendLogDebug(content string) // 日志
-	SendLogWarn(content string)
-	SendLogError(content string, err error)
+	SendLogDebug(content string)            // 调试日志
+	SendLogWarn(content string)             // 警告日志
+	SendLogError(content string, err error) // 错误日志
 
 	// 内部使用的方法
-	stop()
-	setConfig(config *Config)
-	setAdapter(adapter easyCon.IAdapter)
-	setWriteLog(writeLog func(level string, content string, err string))
+	setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config)
 }
 
 type Reg struct {
@@ -38,13 +36,25 @@ type OnReqFunc func(ctx IContext) (any, error)
 type OnNoticeFunc func(ctx IContext)
 
 type Service struct {
-	adapter  easyCon.IAdapter
-	config   *Config
-	writeLog func(level string, content string, err string)
+	adapter easyCon.IAdapter
+	config  *Config
+	reg     *Reg
+}
+
+// GetReg 获取绑定事件
+func (bll *Service) GetInvokes() *Reg {
+	return bll.reg
 }
 
 // Invoke 调用请求实现方法
-func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, any) {
+func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (code easyCon.EResp, resp any) {
+	defer errRecover(func(err string) {
+		code = easyCon.ERespError
+		resp = errors.New(err)
+		qio.WriteString("./debug.log", err+"\n", true)
+	}, bll.config.module, pack.Route, pack.Content)
+
+	// 创建上下文
 	ctx, err := newContent(pack.Content, &pack, nil, nil)
 	if err != nil {
 		return easyCon.ERespBadReq, err
@@ -129,13 +139,11 @@ func (bll *Service) SendRetainNotice(route string, content any) {
 func (bll *Service) SendLogDebug(content string) {
 	fmt.Println(fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), content))
 	bll.adapter.Debug(content)
-	bll.writeLog("Debug", content, "")
 }
 
 // SendLogWarn 发送Warn日志
 func (bll *Service) SendLogWarn(content string) {
 	bll.adapter.Warn(content)
-	bll.writeLog("Warn", content, "")
 }
 
 // SendLogError 发送Error日志
@@ -145,52 +153,11 @@ func (bll *Service) SendLogError(content string, err error) {
 	if err != nil {
 		errStr = err.Error()
 	}
-	bll.writeLog("Error", content, errStr)
+	writeLog(bll.config.module, "Error", content, errStr)
 }
 
-func (bll *Service) stop() {
-
-}
-
-func (bll *Service) setAdapter(adapter easyCon.IAdapter) {
+func (bll *Service) setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config) {
+	bll.reg = reg
 	bll.adapter = adapter
-}
-
-func (bll *Service) setWriteLog(writeLog func(level string, content string, err string)) {
-	bll.writeLog = writeLog
-}
-
-func (bll *Service) setConfig(config *Config) {
 	bll.config = config
-}
-
-func (bll *Service) getIp() string {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-
-	ips := []string{}
-	for _, face := range interfaces {
-		// 跳过未启用的接口或环回接口
-		if face.Flags&net.FlagUp == 0 || face.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-
-		// 获取该接口的地址列表
-		addrList, err := face.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, addr := range addrList {
-			// 检查地址是否为 IP 地址
-			if ipNet, ok := addr.(*net.IPNet); ok && ipNet.IP.To4() != nil {
-				ips = append(ips, ipNet.IP.String())
-			}
-		}
-	}
-
-	str, _ := json.Marshal(ips)
-	return string(str)
 }
