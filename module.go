@@ -18,8 +18,27 @@ type IModule interface {
 	Stop()
 }
 
-// NewModule 创建模块
+// NewModule 创建Cmd模块
 func NewModule(name, desc, version string, service IService, config IConfig) IModule {
+	return newModule(name, desc, version, service, config, nil)
+}
+
+// NewCgoModule 创建Cgo模块
+func NewCgoModule(name, desc, version string, service IService, config IConfig, callback CallbackDelegate) IModule {
+	return newModule(name, desc, version, service, config, callback)
+}
+
+type module struct {
+	service         IService
+	reg             *Reg
+	config          *Config
+	adapter         easyCon.IAdapter
+	waitConnectChan chan bool
+	asyncRun        bool
+	callback        CallbackDelegate
+}
+
+func newModule(name, desc, version string, service IService, config IConfig, callback CallbackDelegate) IModule {
 	if service == nil {
 		panic(errors.New("service cannot be nil"))
 	}
@@ -32,20 +51,12 @@ func NewModule(name, desc, version string, service IService, config IConfig) IMo
 
 	// 创建基础模块
 	m := &module{
-		service: service,
-		config:  config.getBaseConfig(),
+		service:  service,
+		config:   config.getBaseConfig(),
+		callback: callback,
 	}
 	instance = service
 	return m
-}
-
-type module struct {
-	service         IService
-	reg             *Reg
-	config          *Config
-	adapter         easyCon.IAdapter
-	waitConnectChan chan bool
-	asyncRun        bool
 }
 
 // Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
@@ -118,7 +129,7 @@ func (m *module) start() {
 	}
 	// 创建模块链接
 	m.adapter = easyCon.NewMqttAdapter(setting)
-	m.service.setEnv(m.reg, m.adapter, m.config)
+	m.service.setEnv(m.reg, m.adapter, m.config, m.callback)
 
 	// 等待连接成功
 	time.Sleep(time.Millisecond * 1)

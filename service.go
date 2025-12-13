@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kamioair/utils/qconvert"
 	"github.com/kamioair/utils/qio"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"time"
@@ -18,7 +19,7 @@ type IService interface {
 	SendLogError(content string, err error) // 错误日志
 
 	// 内部使用的方法
-	setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config)
+	setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config, callback CallbackDelegate)
 }
 
 type Reg struct {
@@ -31,17 +32,21 @@ type Reg struct {
 	OnLog           func(log easyCon.PackLog)
 }
 
+// CallbackDelegate 回调
+type CallbackDelegate func(inParam string) (string, error)
+
 type OnReqFunc func(ctx IContext) (any, error)
 
 type OnNoticeFunc func(ctx IContext)
 
 type Service struct {
-	adapter easyCon.IAdapter
-	config  *Config
-	reg     *Reg
+	adapter  easyCon.IAdapter
+	config   *Config
+	reg      *Reg
+	callback CallbackDelegate
 }
 
-// GetReg 获取绑定事件
+// GetInvokes 获取绑定事件
 func (bll *Service) GetInvokes() *Reg {
 	return bll.reg
 }
@@ -89,6 +94,39 @@ func (bll *Service) ReturnErr(content any) (code easyCon.EResp, resp any) {
 // ReturnNotFind 返回未找到
 func (bll *Service) ReturnNotFind() (code easyCon.EResp, resp any) {
 	return easyCon.ERespRouteNotFind, nil
+}
+
+// SendCallBack 发送回调（仅再Cgo模式下面使用）
+func (bll *Service) SendCallBack(module, route string, params any) (IContext, error) {
+	if bll.callback == nil {
+		return nil, errors.New("callback is nil")
+	}
+
+	from := ""
+	if bll.config != nil {
+		from = bll.config.module
+	}
+	req := easyCon.PackReq{
+		From:    from,
+		ReqTime: qconvert.Time.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss.fff"),
+		To:      module,
+		Route:   route,
+		Content: params,
+	}
+	data, _ := json.Marshal(req)
+
+	// 调用回调
+	resp, err := bll.callback(string(data))
+	if err != nil {
+		return nil, err
+	}
+
+	// 返回内容
+	ctx, err := newContent(resp, &req, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return ctx, nil
 }
 
 // SendRequest 发送请求
@@ -156,8 +194,9 @@ func (bll *Service) SendLogError(content string, err error) {
 	writeLog(bll.config.module, "Error", content, errStr)
 }
 
-func (bll *Service) setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config) {
+func (bll *Service) setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config, callback CallbackDelegate) {
 	bll.reg = reg
 	bll.adapter = adapter
 	bll.config = config
+	bll.callback = callback
 }
