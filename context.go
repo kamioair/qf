@@ -20,7 +20,7 @@ type context struct {
 }
 
 // NewContent 创建上下文
-func NewContent(value string) (IContext, error) {
+func NewContent(value any) (IContext, error) {
 	return newContent(value, nil, nil, nil)
 }
 
