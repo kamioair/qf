@@ -121,7 +121,7 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 		TimeOut:          3000,
 		Retry:            3,
 		LogMode:          "NONE",
-		LinkTimeOut:      1000,
+		LinkTimeOut:      3000,
 		IsRandomClientID: false,
 		IsSyncMode:       false,
 	}

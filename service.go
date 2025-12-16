@@ -167,7 +167,7 @@ func (bll *Service) SendLogError(content string, err error) {
 	if cfg == ECallBackAll || cfg == ECallBackUp {
 		bll.adapter.Err(content, err)
 	}
-	bll.sendCallback(easyCon.EPTypeLog, "Error", content)
+	bll.sendCallback(easyCon.EPTypeLog, "Error", fmt.Sprintf("%s %s", content, errStr))
 }
 
 func (bll *Service) sendCallback(pType easyCon.EPType, route string, content any) {
@@ -191,7 +191,7 @@ func (bll *Service) sendCallback(pType easyCon.EPType, route string, content any
 		reqJson, _ := json.Marshal(req)
 		_, err := bll.callback(string(reqJson))
 		if err != nil {
-			bll.SendLogError(fmt.Sprintf("[SendCallback Error %s.%s] InParams=%s", pType, route, ctx), err)
+			writeLog(bll.config.module, "Error", fmt.Sprintf("[SendCallback Error %s.%s] InParams=%s", pType, route, ctx), err.Error())
 		}
 	}
 }

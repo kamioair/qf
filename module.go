@@ -27,6 +27,7 @@ type module struct {
 	adapter         easyCon.IAdapter
 	waitConnectChan chan bool
 	waitLock        sync.Mutex
+	isWaitConnect   bool
 	asyncRun        bool
 	callback        CallbackDelegate
 }
@@ -149,6 +150,7 @@ func (m *module) start() {
 			break
 		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
 			// 连接超时，也继续
+			m.isWaitConnect = true
 			fmt.Printf("[Wait]")
 			break
 		}
@@ -183,13 +185,16 @@ func (m *module) onExiting() {
 }
 
 func (m *module) onState(status easyCon.EStatus) {
-	fmt.Println("Client link state = [%s]\n", status)
+	m.waitLock.Lock()
+	defer m.waitLock.Unlock()
+	if m.isWaitConnect {
+		m.isWaitConnect = false
+		fmt.Printf("\nClient link state = [%s]\n", status)
+	}
+
 	if status == easyCon.EStatusLinked {
-		m.waitLock.Lock()
 		ch := m.waitConnectChan
 		m.waitConnectChan = nil // 先清空，再解锁
-		m.waitLock.Unlock()
-
 		// 在锁外进行channel操作
 		if ch != nil {
 			select {
