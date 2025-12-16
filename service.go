@@ -4,23 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/kamioair/utils/qconvert"
-	"github.com/kamioair/utils/qio"
+	"github.com/kamioair/utils/qtime"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"time"
 )
-
-type IService interface {
-	Reg(reg *Reg)     // 注册事件
-	GetInvokes() *Reg // 返回注册事件
-
-	SendLogDebug(content string)            // 调试日志
-	SendLogWarn(content string)             // 警告日志
-	SendLogError(content string, err error) // 错误日志
-
-	// 内部使用的方法
-	setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config, callback CallbackDelegate)
-}
 
 type Reg struct {
 	OnInit          func()
@@ -56,7 +43,7 @@ func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (code easyCon.
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
 		resp = errors.New(err)
-		qio.WriteString("./debug.log", err+"\n", true)
+		bll.SendLogError("invoke panic", errors.New(fmt.Sprintf("code = %s, error = %s", code, resp)))
 	}, bll.config.module, pack.Route, pack.Content)
 
 	// 创建上下文
@@ -96,39 +83,6 @@ func (bll *Service) ReturnNotFind() (code easyCon.EResp, resp any) {
 	return easyCon.ERespRouteNotFind, nil
 }
 
-// SendCallBack 发送回调（仅再Cgo模式下面使用）
-func (bll *Service) SendCallBack(module, route string, params any) (IContext, error) {
-	if bll.callback == nil {
-		return nil, errors.New("callback is nil")
-	}
-
-	from := ""
-	if bll.config != nil {
-		from = bll.config.module
-	}
-	req := easyCon.PackReq{
-		From:    from,
-		ReqTime: qconvert.Time.ToString(time.Now(), "yyyy-MM-dd HH:mm:ss.fff"),
-		To:      module,
-		Route:   route,
-		Content: params,
-	}
-	data, _ := json.Marshal(req)
-
-	// 调用回调
-	resp, err := bll.callback(string(data))
-	if err != nil {
-		return nil, err
-	}
-
-	// 返回内容
-	ctx, err := newContent(resp, &req, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	return ctx, nil
-}
-
 // SendRequest 发送请求
 func (bll *Service) SendRequest(module, route string, params any) (IContext, error) {
 	resp := bll.adapter.Req(module, route, params)
@@ -157,41 +111,89 @@ func (bll *Service) SendRequestWithTimeout(module, route string, params any, tim
 
 // SendNotice 发送通知
 func (bll *Service) SendNotice(route string, content any) {
-	err := bll.adapter.SendNotice(route, content)
-	if err != nil {
-		str, _ := json.Marshal(content)
-		bll.SendLogError(fmt.Sprintf("[SendNotice To %s] InParams=%s", route, string(str)), err)
+	cfg := bll.config.CallBack.Notice
+	if cfg == ECallBackAll || cfg == ECallBackUp {
+		err := bll.adapter.SendNotice(route, content)
+		if err != nil {
+			str, _ := json.Marshal(content)
+			bll.SendLogError(fmt.Sprintf("[SendNotice To %s] InParams=%s", route, string(str)), err)
+		}
 	}
+	bll.sendCallback(easyCon.EPTypeNotice, route, content)
 }
 
 // SendRetainNotice 发送保持通知
 func (bll *Service) SendRetainNotice(route string, content any) {
-	err := bll.adapter.SendRetainNotice(route, content)
-	if err != nil {
-		str, _ := json.Marshal(content)
-		bll.SendLogError(fmt.Sprintf("[SendRetainNotice To %s] InParams=%s", route, string(str)), err)
+	cfg := bll.config.CallBack.Notice
+	if cfg == ECallBackAll || cfg == ECallBackUp {
+		err := bll.adapter.SendRetainNotice(route, content)
+		if err != nil {
+			str, _ := json.Marshal(content)
+			bll.SendLogError(fmt.Sprintf("[SendRetainNotice To %s] InParams=%s", route, string(str)), err)
+		}
 	}
+	bll.sendCallback(easyCon.EPTypeNotice, route, content)
 }
 
 // SendLogDebug 发送Debug日志
 func (bll *Service) SendLogDebug(content string) {
 	fmt.Println(fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), content))
-	bll.adapter.Debug(content)
+	cfg := bll.config.CallBack.Notice
+	if cfg == ECallBackAll || cfg == ECallBackUp {
+		bll.adapter.Debug(content)
+	}
+	bll.sendCallback(easyCon.EPTypeLog, "Debug", content)
 }
 
 // SendLogWarn 发送Warn日志
 func (bll *Service) SendLogWarn(content string) {
-	bll.adapter.Warn(content)
+	cfg := bll.config.CallBack.Notice
+	if cfg == ECallBackAll || cfg == ECallBackUp {
+		bll.adapter.Warn(content)
+	}
+	bll.sendCallback(easyCon.EPTypeLog, "Warn", content)
 }
 
 // SendLogError 发送Error日志
 func (bll *Service) SendLogError(content string, err error) {
-	bll.adapter.Err(content, err)
+	// 记录日志
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
 	}
 	writeLog(bll.config.module, "Error", content, errStr)
+
+	cfg := bll.config.CallBack.Notice
+	if cfg == ECallBackAll || cfg == ECallBackUp {
+		bll.adapter.Err(content, err)
+	}
+	bll.sendCallback(easyCon.EPTypeLog, "Error", content)
+}
+
+func (bll *Service) sendCallback(pType easyCon.EPType, route string, content any) {
+	cfg := bll.config.CallBack.Notice
+	if (cfg == ECallBackAll || cfg == ECallBackBack) && bll.callback != nil {
+		ctx := ""
+		if v, ok := content.(string); ok == true {
+			ctx = v
+		} else {
+			j, _ := json.Marshal(content)
+			ctx = string(j)
+		}
+
+		req := CallbackReq{
+			PType:   pType,
+			ReqTime: qtime.NewDateTime(time.Now()).ToString(),
+			Route:   route,
+			Content: ctx,
+		}
+		// 调用回调
+		reqJson, _ := json.Marshal(req)
+		_, err := bll.callback(string(reqJson))
+		if err != nil {
+			bll.SendLogError(fmt.Sprintf("[SendCallback Error %s.%s] InParams=%s", pType, route, ctx), err)
+		}
+	}
 }
 
 func (bll *Service) setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config, callback CallbackDelegate) {

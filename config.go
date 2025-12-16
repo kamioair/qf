@@ -11,16 +11,13 @@ import (
 	"strings"
 )
 
-type IConfig interface {
-	getBaseConfig() *Config
-}
-
 type Config struct {
-	module   string // 模块服务名称
-	desc     string // 模块服务描述
-	version  string // 模块服务版本
-	filePath string // 配置文件路径
-	exit     string // 检查进程退出
+	module   string  // 模块服务名称
+	desc     string  // 模块服务描述
+	version  string  // 模块服务版本
+	filePath string  // 配置文件路径
+	exit     string  // 检查进程退出
+	crypto   ICrypto // 加解密接口
 	Broker   struct {
 		Addr             string // 地址
 		UId              string // 用户名
@@ -33,7 +30,17 @@ type Config struct {
 		IsRandomClientID bool   // 是否随机clientID
 		IsSyncMode       bool   // 是否同步模式
 	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:请求超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀，用于同一个模块不同实例\n LinkTimeOut:连接等待超时(毫秒) 0表示无限等待直到连上\n IsRandomClientID:是否随机clientID\n IsSyncMode:是否请求同步模式，启用后所有请求无法并行，只能一个一个执行"` // 服务连接配置
+	CallBack struct {
+		Notice string
+		Log    string
+	} `comment:"CallBack回调配置 Back/Up/All\n Notice:通知回调\n Log:日志回调"`
 }
+
+const (
+	ECallBackBack = "Back"
+	ECallBackUp   = "Up"
+	ECallBackAll  = "All"
+)
 
 type emptyConfig struct {
 	Config
@@ -48,6 +55,10 @@ var (
 // GetModuleInfo 获取基础配置（给外部用）
 func (c *Config) GetModuleInfo() (Name string, Desc string, Version string) {
 	return c.module, c.desc, c.version
+}
+
+func (c *Config) RegCrypto(crypto ICrypto) {
+	c.crypto = crypto
 }
 
 // getBaseConfig 获取基础配置（供内部module.go调用）
@@ -113,6 +124,13 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 		LinkTimeOut:      1000,
 		IsRandomClientID: false,
 		IsSyncMode:       false,
+	}
+	config.CallBack = struct {
+		Notice string
+		Log    string
+	}{
+		Notice: "All",
+		Log:    "All",
 	}
 
 	return config

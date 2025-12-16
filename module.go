@@ -6,17 +6,9 @@ import (
 	"fmt"
 	"github.com/kamioair/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
+	"sync"
 	"time"
 )
-
-type IModule interface {
-	// Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
-	Run()
-	// RunAsync 异步运行模块，执行后不等待，单进程需要启动多模块时使用（dll模式）
-	RunAsync()
-	// Stop 停止模块
-	Stop()
-}
 
 // NewModule 创建Cmd模块
 func NewModule(name, desc, version string, service IService, config IConfig) IModule {
@@ -34,6 +26,7 @@ type module struct {
 	config          *Config
 	adapter         easyCon.IAdapter
 	waitConnectChan chan bool
+	waitLock        sync.Mutex
 	asyncRun        bool
 	callback        CallbackDelegate
 }
@@ -88,6 +81,7 @@ func (m *module) start() {
 	}, m.config.module, "init", nil)
 
 	m.waitConnectChan = make(chan bool)
+	m.waitLock = sync.Mutex{}
 
 	cfg := m.config
 
@@ -113,6 +107,21 @@ func (m *module) start() {
 	}
 	setting.UID = cfg.Broker.UId
 	setting.PWD = cfg.Broker.Pwd
+	// 密码解密
+	if cfg.crypto != nil {
+		if setting.UID != "" {
+			nUid, e := cfg.crypto.Decrypt(setting.UID)
+			if e == nil {
+				setting.UID = nUid
+			}
+		}
+		if setting.PWD != "" {
+			nPwd, e := cfg.crypto.Decrypt(setting.PWD)
+			if e == nil {
+				setting.PWD = nPwd
+			}
+		}
+	}
 	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
 	setting.ReTry = cfg.Broker.Retry
 	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
@@ -140,7 +149,7 @@ func (m *module) start() {
 			break
 		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
 			// 连接超时，也继续
-			fmt.Printf("[UnLink]")
+			fmt.Printf("[Wait]")
 			break
 		}
 	}
@@ -171,6 +180,29 @@ func (m *module) stop() {
 
 func (m *module) onExiting() {
 	qlauncher.Exit()
+}
+
+func (m *module) onState(status easyCon.EStatus) {
+	fmt.Println("Client link state = [%s]\n", status)
+	if status == easyCon.EStatusLinked {
+		m.waitLock.Lock()
+		ch := m.waitConnectChan
+		m.waitConnectChan = nil // 先清空，再解锁
+		m.waitLock.Unlock()
+
+		// 在锁外进行channel操作
+		if ch != nil {
+			select {
+			case ch <- true: // 非阻塞发送
+				close(ch)
+			default: // 防止阻塞
+				close(ch)
+			}
+		}
+	}
+	if m.reg != nil && m.reg.OnStatusChanged != nil {
+		go m.reg.OnStatusChanged(status)
+	}
 }
 
 func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
@@ -208,17 +240,6 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		return code, resp
 	}
 	return easyCon.ERespRouteNotFind, "Route Not Matched"
-}
-
-func (m *module) onState(status easyCon.EStatus) {
-	if status == easyCon.EStatusLinked {
-		// 连接成功
-		m.waitConnectChan <- true
-		close(m.waitConnectChan)
-	}
-	if m.reg.OnStatusChanged != nil {
-		m.reg.OnStatusChanged(status)
-	}
 }
 
 func (m *module) onGetVersion() []string {

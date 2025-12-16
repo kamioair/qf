@@ -9,7 +9,7 @@ import (
 // IContext 上下文
 type IContext interface {
 	Raw() string
-	Bind(refStruct any)
+	Bind(refStruct any) error
 }
 
 type context struct {
@@ -51,11 +51,8 @@ func (c *context) Raw() string {
 	return c.raw
 }
 
-func (c *context) Bind(refStruct any) {
-	err := json.Unmarshal([]byte(c.raw), refStruct)
-	if err != nil {
-		panic(err)
-	}
+func (c *context) Bind(refStruct any) error {
+	return json.Unmarshal([]byte(c.raw), refStruct)
 }
 
 func formatRespError(respCode easyCon.EResp, errStr string) string {
