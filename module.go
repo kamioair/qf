@@ -96,47 +96,50 @@ func (m *module) start() {
 	m.reg = &Reg{}
 	m.service.Reg(m.reg)
 
-	fmt.Printf("Connecting Broker... (Addr: %s) ", cfg.Broker.Addr)
+	// 解密连接配置
+	addr := cfg.Broker.Addr
+	uid := cfg.Broker.UId
+	pwd := cfg.Broker.Pwd
+	if cfg.crypto != nil {
+		nAddr, e := cfg.crypto.Decrypt(addr)
+		if e == nil {
+			addr = nAddr
+		}
+		nUid, e := cfg.crypto.Decrypt(uid)
+		if e == nil {
+			uid = nUid
+		}
+		nPwd, e := cfg.crypto.Decrypt(pwd)
+		if e == nil {
+			pwd = nPwd
+		}
+	}
+
+	fmt.Printf("Connecting Broker... (Addr: %s) ", addr)
 	// 创建easyCon客户端
-	clientId := cfg.module
-	setting := easyCon.NewSetting(clientId, cfg.Broker.Addr, m.onReq, m.onState)
+	setting := easyCon.NewSetting(cfg.module, addr, m.onReq, m.onState)
+	setting.UID = uid
+	setting.PWD = pwd
+	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
+	setting.ReTry = cfg.Broker.Retry
+	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
+	setting.PreFix = cfg.Broker.Prefix
+	setting.IsRandomClientID = cfg.Broker.IsRandomClientID
+	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
+	if cfg.Broker.IsSyncMode {
+		setting.EProtocol = easyCon.EProtocolMQTTSync
+	}
 	if m.reg.OnNotice != nil {
 		setting.OnNotice = m.reg.OnNotice
 	}
 	if m.reg.OnRetainNotice != nil {
 		setting.OnRetainNotice = m.reg.OnRetainNotice
 	}
-	setting.UID = cfg.Broker.UId
-	setting.PWD = cfg.Broker.Pwd
-	// 密码解密
-	if cfg.crypto != nil {
-		if setting.UID != "" {
-			nUid, e := cfg.crypto.Decrypt(setting.UID)
-			if e == nil {
-				setting.UID = nUid
-			}
-		}
-		if setting.PWD != "" {
-			nPwd, e := cfg.crypto.Decrypt(setting.PWD)
-			if e == nil {
-				setting.PWD = nPwd
-			}
-		}
-	}
-	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
-	setting.ReTry = cfg.Broker.Retry
-	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
-	setting.PreFix = cfg.Broker.Prefix
-	setting.OnExiting = m.onExiting
-	setting.OnGetVersion = m.onGetVersion
-	setting.IsRandomClientID = cfg.Broker.IsRandomClientID
-	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
-	if cfg.Broker.IsSyncMode {
-		setting.EProtocol = easyCon.EProtocolMQTTSync
-	}
 	if m.reg.OnLog != nil {
 		setting.OnLog = m.reg.OnLog
 	}
+	setting.OnExiting = m.onExiting
+	setting.OnGetVersion = m.onGetVersion
 	// 创建模块链接
 	m.adapter = easyCon.NewMqttAdapter(setting)
 	m.service.setEnv(m.reg, m.adapter, m.config, m.callback)
