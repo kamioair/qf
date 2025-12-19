@@ -20,7 +20,7 @@ type Reg struct {
 }
 
 // CallbackDelegate 回调
-type CallbackDelegate func(inParam string) (string, error)
+type CallbackDelegate func(inParam string)
 
 type OnReqFunc func(ctx IContext) (any, error)
 
@@ -189,10 +189,7 @@ func (bll *Service) sendCallback(pType easyCon.EPType, route string, content any
 		}
 		// 调用回调
 		reqJson, _ := json.Marshal(req)
-		_, err := bll.callback(string(reqJson))
-		if err != nil {
-			writeLog(bll.config.module, "Error", fmt.Sprintf("[SendCallback Error %s.%s] InParams=%s", pType, route, ctx), err.Error())
-		}
+		bll.callback(string(reqJson))
 	}
 }
 
