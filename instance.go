@@ -3,6 +3,7 @@ package qf
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	easyCon "github.com/qiu-tec/easy-con.golang"
@@ -38,7 +39,7 @@ type IConfig interface {
 
 // ICrypto 加解密接口
 type ICrypto interface {
-	// Decrypt 加密
+	// Decrypt 解密
 	Decrypt(content string) (string, error)
 }
 
@@ -93,7 +94,10 @@ func (d *defCrypto) Decrypt(content string) (string, error) {
 		return "", fmt.Errorf("base64 decode failed: %v", err)
 	}
 
-	block, err := aes.NewCipher([]byte(d.key))
+	// 先将传入的密钥串加密后，得到密钥
+	hash := sha256.Sum256([]byte(d.key))
+	// 再用密钥进行解密
+	block, err := aes.NewCipher(hash[:])
 	if err != nil {
 		return "", fmt.Errorf("cipher creation failed: %v", err)
 	}

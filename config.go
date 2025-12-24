@@ -12,13 +12,14 @@ import (
 )
 
 type Config struct {
-	module   string  // 模块服务名称
-	desc     string  // 模块服务描述
-	version  string  // 模块服务版本
-	filePath string  // 配置文件路径
-	exit     string  // 检查进程退出
-	crypto   ICrypto // 加解密接口
-	Broker   struct {
+	module        string  // 模块服务名称
+	desc          string  // 模块服务描述
+	version       string  // 模块服务版本
+	filePath      string  // 配置文件路径
+	exit          string  // 检查进程退出
+	crypto        ICrypto // 加解密接口
+	customSection string  // 自定义配置节名称
+	Broker        struct {
 		Addr             string // 地址
 		UId              string // 用户名
 		Pwd              string // 密码
@@ -61,6 +62,10 @@ func (c *Config) RegCrypto(crypto ICrypto) {
 	c.crypto = crypto
 }
 
+func (c *Config) SetCustomSection(section string) {
+	c.customSection = section
+}
+
 // getBaseConfig 获取基础配置（供内部module.go调用）
 func (c *Config) getBaseConfig() *Config {
 	return c
@@ -85,7 +90,11 @@ func loadConfig(name, desc, version string, config IConfig) {
 	setByArgs(baseCfg)
 
 	// 加载模块自定义配置
-	err = qconfig.LoadConfig(baseCfg.filePath, name, config)
+	section := baseCfg.customSection
+	if section == "" {
+		section = name
+	}
+	err = qconfig.LoadConfig(baseCfg.filePath, section, config)
 	if err != nil {
 		panic(err)
 	}
@@ -210,7 +219,11 @@ func splitWebSocketURLRegex(url string) (string, string, string, error) {
 // saveConfigFile 保存配置文件（供内部module.go调用）
 func saveConfigFile(config *Config) {
 	// 准备保存选项
-	opts.SectionDescs[config.module] = config.desc
+	section := config.customSection
+	if section == "" {
+		section = config.module
+	}
+	opts.SectionDescs[section] = config.desc
 
 	// 保存配置
 	err := qconfig.SaveConfig(config.filePath, &opts)
