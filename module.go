@@ -15,8 +15,8 @@ func NewModule(name, desc, version string, service IService, config IConfig) IMo
 	return newModule(name, desc, version, service, config, nil)
 }
 
-// NewCgoModule 创建Cgo模块
-func NewCgoModule(name, desc, version string, service IService, config IConfig, callback CallbackDelegate) IModule {
+// NewDllModule 创建Dll模块
+func NewDllModule(name, desc, version string, service IService, config IConfig, callback CallbackDelegate) IModule {
 	return newModule(name, desc, version, service, config, callback)
 }
 
@@ -27,8 +27,6 @@ type module struct {
 	adapter         easyCon.IAdapter
 	waitConnectChan chan bool
 	waitLock        sync.Mutex
-	isWaitConnect   bool
-	asyncRun        bool
 	callback        CallbackDelegate
 }
 
@@ -37,36 +35,38 @@ func newModule(name, desc, version string, service IService, config IConfig, cal
 		panic(errors.New("service cannot be nil"))
 	}
 
-	// 加载配置
-	if config == nil {
-		config = &emptyConfig{}
-	}
-	loadConfig(name, desc, version, config)
-
 	// 创建基础模块
 	m := &module{
-		service:  service,
-		config:   config.getBaseConfig(),
-		callback: callback,
+		service:         service,
+		waitConnectChan: make(chan bool),
+		waitLock:        sync.Mutex{},
+		callback:        callback,
 	}
-	instance = service
+
+	// 注册方法
+	m.reg = &Reg{}
+	m.service.Reg(m.reg)
+
+	// 加载配置
+	m.config = loadConfig(name, desc, version, config)
 	return m
 }
 
 // Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
-func (m *module) Run() {
-	qlauncher.Run(m.start, m.stop, false)
-}
-
-// RunAsync 异步运行模块，执行后不等待，单进程需要启动多模块时使用（dll模式）
-func (m *module) RunAsync() {
-	m.asyncRun = true
-	m.start()
+func (m *module) Run() any {
+	if m.callback != nil {
+		// dll模式
+		m.start()
+	} else {
+		// cmd模式
+		qlauncher.Run(m.start, m.stop, false)
+	}
+	return true
 }
 
 // Stop 停止模块
 func (m *module) Stop() {
-	if m.asyncRun {
+	if m.callback != nil {
 		// 异步允许，则直接退出
 		m.stop()
 	} else {
@@ -117,31 +117,32 @@ func (m *module) start() {
 
 	fmt.Printf("Connecting Broker... (Addr: %s) ", addr)
 	// 创建easyCon客户端
-	setting := easyCon.NewSetting(cfg.module, addr, m.onReq, m.onState)
+	setting := easyCon.NewDefaultMqttSetting(cfg.module, addr)
 	setting.UID = uid
 	setting.PWD = pwd
 	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
 	setting.ReTry = cfg.Broker.Retry
 	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
 	setting.PreFix = cfg.Broker.Prefix
-	setting.IsRandomClientID = cfg.Broker.IsRandomClientID
 	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
-	if cfg.Broker.IsSyncMode {
-		setting.EProtocol = easyCon.EProtocolMQTTSync
+	callback := easyCon.AdapterCallBack{
+		OnStatusChanged: m.onState,
+		OnReqRec:        m.onReq,
+		OnRespRec:       nil,
+		OnExiting:       m.onExiting,
+		OnGetVersion:    m.onGetVersion,
 	}
 	if m.reg.OnNotice != nil {
-		setting.OnNotice = m.reg.OnNotice
+		callback.OnNoticeRec = m.reg.OnNotice
 	}
 	if m.reg.OnRetainNotice != nil {
-		setting.OnRetainNotice = m.reg.OnRetainNotice
+		callback.OnRetainNoticeRec = m.reg.OnRetainNotice
 	}
 	if m.reg.OnLog != nil {
-		setting.OnLog = m.reg.OnLog
+		callback.OnLogRec = m.reg.OnLog
 	}
-	setting.OnExiting = m.onExiting
-	setting.OnGetVersion = m.onGetVersion
 	// 创建模块链接
-	m.adapter = easyCon.NewMqttAdapter(setting)
+	m.adapter = easyCon.NewMqttAdapter(setting, callback)
 	m.service.setEnv(m.reg, m.adapter, m.config, m.callback)
 
 	// 等待连接成功
@@ -153,7 +154,6 @@ func (m *module) start() {
 			break
 		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
 			// 连接超时，也继续
-			m.isWaitConnect = true
 			fmt.Printf("[Wait]")
 			break
 		}
@@ -190,10 +190,7 @@ func (m *module) onExiting() {
 func (m *module) onState(status easyCon.EStatus) {
 	m.waitLock.Lock()
 	defer m.waitLock.Unlock()
-	if m.isWaitConnect {
-		m.isWaitConnect = false
-		fmt.Printf("\nClient link state = [%s]\n", status)
-	}
+	fmt.Printf("Client link state = [%s]\n", status)
 
 	if status == easyCon.EStatusLinked {
 		ch := m.waitConnectChan

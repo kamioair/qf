@@ -6,8 +6,8 @@ import (
 
 // IModule 模块入口接口
 type IModule interface {
-	// Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
-	Run()
+	// Run 运行模块
+	Run() any
 	// Stop 停止模块
 	Stop()
 }

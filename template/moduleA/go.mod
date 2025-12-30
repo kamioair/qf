@@ -1,11 +1,13 @@
-module github.com/kamioair/qf
+module moduleA
 
 go 1.20
 
-replace github.com/qiu-tec/easy-con.golang => ../easy-con.golang
+replace github.com/kamioair/qf => ../../../qf
+
+replace github.com/qiu-tec/easy-con.golang => ../../../easy-con.golang
 
 require (
-	github.com/kamioair/utils v0.0.11
+	github.com/kamioair/qf v1.2.4
 	github.com/qiu-tec/easy-con.golang v0.3.1
 )
 
@@ -15,6 +17,7 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/kamioair/utils v0.0.11 // indirect
 	github.com/kardianos/service v1.2.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/go-ps v1.0.0 // indirect
