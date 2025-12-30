@@ -9,23 +9,6 @@ import (
 	"time"
 )
 
-type Reg struct {
-	OnInit          func()
-	OnStop          func()
-	OnReq           func(pack easyCon.PackReq) (easyCon.EResp, any)
-	OnNotice        func(notice easyCon.PackNotice)
-	OnRetainNotice  func(notice easyCon.PackNotice)
-	OnStatusChanged func(status easyCon.EStatus)
-	OnLog           func(log easyCon.PackLog)
-}
-
-// CallbackDelegate 回调
-type CallbackDelegate func(inParam string)
-
-type OnReqFunc func(ctx IContext) (any, error)
-
-type OnNoticeFunc func(ctx IContext)
-
 type Service struct {
 	adapter  easyCon.IAdapter
 	config   *Config

@@ -72,11 +72,16 @@ func (c *Config) getBaseConfig() *Config {
 }
 
 // loadConfig 加载配置文件
-func loadConfig(name, desc, version string, config IConfig) {
+func loadConfig(name, desc, version string, config IConfig) *Config {
+
 	// 修改系统路径为当前目录
 	err := os.Chdir(qio.GetCurrentDirectory())
 	if err != nil {
 		panic(err)
+	}
+
+	if config == nil {
+		config = &emptyConfig{}
 	}
 
 	// 加载基础配置
@@ -103,6 +108,8 @@ func loadConfig(name, desc, version string, config IConfig) {
 	if fileExist == false {
 		saveConfigFile(baseCfg)
 	}
+
+	return config.getBaseConfig()
 }
 
 // initBaseConfig 初始化基础默认配置

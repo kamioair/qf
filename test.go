@@ -23,11 +23,11 @@ func NewTest(modules ...IModule) *Test {
 
 	// 创建用例模块
 	t.testModule = NewModule("TestModule", "测试模块", "1.0.0", t.testService, nil)
-	t.testModule.RunAsync()
+	t.testModule.Run()
 
 	// 启动测试模块
 	for _, m := range modules {
-		m.RunAsync()
+		m.Run()
 	}
 
 	return t

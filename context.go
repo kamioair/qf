@@ -6,12 +6,6 @@ import (
 	easyCon "github.com/qiu-tec/easy-con.golang"
 )
 
-// IContext 上下文
-type IContext interface {
-	Raw() string
-	Bind(refStruct any) error
-}
-
 type context struct {
 	raw        string
 	reqPack    *easyCon.PackReq
