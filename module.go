@@ -67,8 +67,7 @@ func (bm *baseModule) printModuleInfo() {
 
 // saveConfig 保存配置文件
 func (bm *baseModule) saveConfig() {
-	cfg := bm.service.config().getBase()
-	saveConfigFile(cfg)
+	saveConfigFile(bm.service.config())
 }
 
 // buildAdapterCallBack 构建 easyCon 适配器回调
@@ -98,7 +97,7 @@ func (bm *baseModule) buildAdapterCallBack(
 }
 
 func (bm *baseModule) callOnState(status easyCon.EStatus) {
-	fmt.Printf("Client link state = [%s]\n", status)
+	fmt.Printf("Link state = [%s]\n", status)
 	if bm.reg != nil && bm.reg.OnStatusChanged != nil {
 		go bm.reg.OnStatusChanged(status)
 	}

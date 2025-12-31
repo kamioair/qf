@@ -44,9 +44,7 @@ type emptyConfig struct {
 }
 
 var (
-	opts = qconfig.SaveConfigOptions{
-		SectionDescs: map[string]string{},
-	}
+	loadConfigs = map[string]any{}
 )
 
 // GetModuleInfo 获取基础配置（给外部用）
@@ -144,6 +142,7 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 	if err != nil {
 		panic(err)
 	}
+	loadConfigs[baseCfg.module] = config
 
 	// 首次创建配置文件，立即保存
 	if fileExist == false {
@@ -154,16 +153,25 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 }
 
 // saveConfigFile 保存配置文件（供内部module.go调用）
-func saveConfigFile(config *Config) {
+func saveConfigFile(config IConfig) {
+	baseCfg := config.getBase()
 	// 准备保存选项
-	section := config.customSection
-	if section == "" {
-		section = config.module
+	save := map[string]qconfig.SaveData{}
+	save["Base"] = qconfig.SaveData{
+		Content: baseCfg,
+		Desc:    "模块基础配置",
 	}
-	opts.SectionDescs[section] = config.desc
+	section := baseCfg.customSection
+	if section == "" {
+		section = baseCfg.module
+	}
+	save[section] = qconfig.SaveData{
+		Content: config,
+		Desc:    baseCfg.desc,
+	}
 
 	// 保存配置
-	err := qconfig.SaveConfig(config.filePath, &opts)
+	err := qconfig.SaveConfig(baseCfg.filePath, save)
 	if err != nil {
 		fmt.Printf("保存配置文件失败: %v\n", err)
 	}

@@ -107,11 +107,10 @@ func (m *module) start() {
 	if cfg.Broker.LinkTimeOut > 0 {
 		select {
 		case <-m.waitConnectChan:
-			fmt.Printf("[Link]")
 			break
 		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
 			// 连接超时，也继续
-			fmt.Printf("[Wait]")
+			fmt.Printf("Link state = [BackConn]\n")
 			break
 		}
 	}
