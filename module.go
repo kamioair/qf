@@ -4,99 +4,128 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/kamioair/utils/qconvert"
-	"github.com/kamioair/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
-	"sync"
-	"time"
 )
 
-// NewModule 创建Cmd模块
-func NewModule(service IService) IModule {
-	return newModule(service, nil)
+// baseModule 基础模块，包含所有模块类型的公共实现
+type baseModule struct {
+	service IService
+	reg     *Reg
+	adapter easyCon.IAdapter
 }
 
-// NewDllModule 创建Dll模块
-func NewDllModule(service IService, callback CallbackDelegate) IModule {
-	return newModule(service, callback)
-}
-
-type module struct {
-	service         IService
-	reg             *Reg
-	adapter         easyCon.IAdapter
-	waitConnectChan chan bool
-	waitLock        sync.Mutex
-	callback        CallbackDelegate
-}
-
-func newModule(service IService, callback CallbackDelegate) IModule {
+// newBaseModule 创建基础模块
+func newBaseModule(service IService) *baseModule {
 	if service == nil {
 		panic(errors.New("service cannot be nil"))
 	}
 
-	// 创建基础模块
-	m := &module{
-		service:         service,
-		waitConnectChan: make(chan bool),
-		waitLock:        sync.Mutex{},
-		callback:        callback,
+	bm := &baseModule{
+		service: service,
+		reg:     &Reg{},
 	}
+	bm.service.Reg(bm.reg)
 
-	// 注册方法
-	m.reg = &Reg{}
-	m.service.Reg(m.reg)
-
-	return m
+	return bm
 }
 
-// Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
-func (m *module) Run() {
-	if m.callback != nil {
-		// dll模式
-		m.start()
-	} else {
-		// cmd模式
-		qlauncher.Run(m.start, m.stop, false)
-	}
+// getService 获取服务接口
+func (bm *baseModule) getService() IService {
+	return bm.service
 }
 
-// Stop 停止模块
-func (m *module) Stop() {
-	if m.callback != nil {
-		// 异步允许，则直接退出
-		m.stop()
-	} else {
-		qlauncher.Exit()
-	}
+// getReg 获取注册对象
+func (bm *baseModule) getReg() *Reg {
+	return bm.reg
 }
 
-func (m *module) start() {
-	cfg := m.service.config().getBase()
+// setAdapter 设置适配器
+func (bm *baseModule) setAdapter(adapter easyCon.IAdapter) {
+	bm.adapter = adapter
+}
 
-	defer errRecover(func(err string) {
-		fmt.Println("")
-		fmt.Println(err)
-		fmt.Println("-------------------------------------")
-	}, cfg.module, "init", nil)
+// getAdapter 获取适配器
+func (bm *baseModule) getAdapter() easyCon.IAdapter {
+	return bm.adapter
+}
 
-	m.waitConnectChan = make(chan bool)
-	m.waitLock = sync.Mutex{}
+// setEnv 设置模块环境（在适配器创建后调用）
+func (bm *baseModule) setEnv(callback CallbackDelegate) {
+	bm.service.setEnv(bm.reg, bm.adapter, callback)
+}
 
+// printModuleInfo 打印模块启动信息
+func (bm *baseModule) printModuleInfo() {
+	cfg := bm.service.config().getBase()
 	fmt.Println("-------------------------------------")
 	fmt.Println(" Module:", cfg.module)
 	fmt.Println(" Desc:", cfg.desc)
 	fmt.Println(" ModuleVersion:", cfg.version)
 	fmt.Println(" FrameVersion:", Version)
 	fmt.Println("-------------------------------------")
+}
 
-	m.reg = &Reg{}
-	m.service.Reg(m.reg)
+// saveConfig 保存配置文件
+func (bm *baseModule) saveConfig() {
+	cfg := bm.service.config().getBase()
+	saveConfigFile(cfg)
+}
 
-	// 解密连接配置
-	addr := cfg.Broker.Addr
-	uid := cfg.Broker.UId
-	pwd := cfg.Broker.Pwd
+// buildAdapterCallBack 构建 easyCon 适配器回调
+func (bm *baseModule) buildAdapterCallBack(
+	onStatusChanged easyCon.StatusChangedHandler,
+	onReq easyCon.ReqHandler,
+	onExiting func(),
+	onGetVersion func() []string,
+) easyCon.AdapterCallBack {
+	callback := easyCon.AdapterCallBack{
+		OnStatusChanged: onStatusChanged,
+		OnReqRec:        onReq,
+		OnRespRec:       nil,
+		OnExiting:       onExiting,
+		OnGetVersion:    onGetVersion,
+	}
+	if bm.reg.OnNotice != nil {
+		callback.OnNoticeRec = bm.reg.OnNotice
+	}
+	if bm.reg.OnRetainNotice != nil {
+		callback.OnRetainNoticeRec = bm.reg.OnRetainNotice
+	}
+	if bm.reg.OnLog != nil {
+		callback.OnLogRec = bm.reg.OnLog
+	}
+	return callback
+}
+
+func (bm *baseModule) callOnState(status easyCon.EStatus) {
+	fmt.Printf("Client link state = [%s]\n", status)
+	if bm.reg != nil && bm.reg.OnStatusChanged != nil {
+		go bm.reg.OnStatusChanged(status)
+	}
+}
+
+// callOnInit 调用业务初始化回调
+func (bm *baseModule) callOnInit() {
+	if bm.reg.OnInit != nil {
+		bm.reg.OnInit()
+	}
+}
+
+// callOnStop 调用业务停止回调
+func (bm *baseModule) callOnStop() {
+	if bm.reg.OnStop != nil {
+		bm.reg.OnStop()
+	}
+}
+
+// decryptBrokerConfig 解密 Broker 配置
+func (bm *baseModule) decryptBrokerConfig() (addr, uid, pwd string) {
+	cfg := bm.service.config().getBase()
+
+	addr = cfg.Broker.Addr
+	uid = cfg.Broker.UId
+	pwd = cfg.Broker.Pwd
+
 	if cfg.crypto != nil {
 		nAddr, e := cfg.crypto.Decrypt(addr)
 		if e == nil {
@@ -112,108 +141,12 @@ func (m *module) start() {
 		}
 	}
 
-	fmt.Printf("Connecting Broker... (Addr: %s) ", addr)
-	name := cfg.module
-	if cfg.Broker.IsRandomClientID {
-		name = fmt.Sprintf("%s-%s", name, qconvert.Time.ToString(time.Now(), "yyyyMMddHHmmssfff"))
-	}
-	// 创建easyCon客户端
-	setting := easyCon.NewDefaultMqttSetting(name, addr)
-	setting.UID = uid
-	setting.PWD = pwd
-	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
-	setting.ReTry = cfg.Broker.Retry
-	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
-	setting.PreFix = cfg.Broker.Prefix
-	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
-	setting.IsSync = cfg.Broker.IsSyncMode
-	callback := easyCon.AdapterCallBack{
-		OnStatusChanged: m.onState,
-		OnReqRec:        m.onReq,
-		OnRespRec:       nil,
-		OnExiting:       m.onExiting,
-		OnGetVersion:    m.onGetVersion,
-	}
-	if m.reg.OnNotice != nil {
-		callback.OnNoticeRec = m.reg.OnNotice
-	}
-	if m.reg.OnRetainNotice != nil {
-		callback.OnRetainNoticeRec = m.reg.OnRetainNotice
-	}
-	if m.reg.OnLog != nil {
-		callback.OnLogRec = m.reg.OnLog
-	}
-	// 创建模块链接
-	m.adapter = easyCon.NewMqttAdapter(setting, callback)
-	m.service.setEnv(m.reg, m.adapter, m.callback)
-
-	// 等待连接成功
-	time.Sleep(time.Millisecond * 1)
-	if cfg.Broker.LinkTimeOut > 0 {
-		select {
-		case <-m.waitConnectChan:
-			fmt.Printf("[Link]")
-			break
-		case <-time.After(time.Duration(cfg.Broker.LinkTimeOut) * time.Millisecond):
-			// 连接超时，也继续
-			fmt.Printf("[Wait]")
-			break
-		}
-	}
-
-	// 调用业务的初始化
-	if m.reg.OnInit != nil {
-		m.reg.OnInit()
-	}
-
-	// 保存配置文件
-	saveConfigFile(cfg)
-
-	// 启动成功
-	fmt.Printf("\nStart OK\n\n")
+	return
 }
 
-func (m *module) stop() {
-	// 调用业务的退出
-	if m.reg.OnStop != nil {
-		m.reg.OnStop()
-	}
-	// 退出客户端
-	if m.adapter != nil {
-		m.adapter.Stop()
-	}
-	fmt.Println("Module stop ok")
-}
-
-func (m *module) onExiting() {
-	qlauncher.Exit()
-}
-
-func (m *module) onState(status easyCon.EStatus) {
-	m.waitLock.Lock()
-	defer m.waitLock.Unlock()
-	fmt.Printf("Client link state = [%s]\n", status)
-
-	if status == easyCon.EStatusLinked {
-		ch := m.waitConnectChan
-		m.waitConnectChan = nil // 先清空，再解锁
-		// 在锁外进行channel操作
-		if ch != nil {
-			select {
-			case ch <- true: // 非阻塞发送
-				close(ch)
-			default: // 防止阻塞
-				close(ch)
-			}
-		}
-	}
-	if m.reg != nil && m.reg.OnStatusChanged != nil {
-		go m.reg.OnStatusChanged(status)
-	}
-}
-
-func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
-	cfg := m.service.config().getBase()
+// handleReq 通用请求处理
+func (bm *baseModule) handleReq(pack easyCon.PackReq, onStop func()) (code easyCon.EResp, resp any) {
+	cfg := bm.service.config().getBase()
 
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
@@ -222,7 +155,9 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 
 	switch pack.Route {
 	case "Exit":
-		m.Stop()
+		if onStop != nil {
+			onStop()
+		}
 		return easyCon.ERespSuccess, nil
 	case "Version":
 		ver := map[string]string{}
@@ -232,13 +167,14 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		ver["FrameVersion"] = Version
 		return easyCon.ERespSuccess, ver
 	}
-	if m.reg.OnReq != nil {
-		code, resp = m.reg.OnReq(pack)
+
+	if bm.reg.OnReq != nil {
+		code, resp = bm.reg.OnReq(pack)
 		if code != easyCon.ERespSuccess {
 			// 记录日志
 			str, _ := json.Marshal(pack.Content)
 			errStr := ""
-			if e := resp.(error); e != nil {
+			if e, ok := resp.(error); ok && e != nil {
 				errStr = e.Error()
 			} else {
 				errStr = fmt.Sprintf("%v", resp)
@@ -250,7 +186,15 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 	return easyCon.ERespRouteNotFind, "Route Not Matched"
 }
 
-func (m *module) onGetVersion() []string {
-	cfg := m.service.config().getBase()
+// getVersion 获取版本信息
+func (bm *baseModule) getVersion() []string {
+	cfg := bm.service.config().getBase()
 	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", cfg.version)}
+}
+
+// stopAdapter 停止适配器
+func (bm *baseModule) stopAdapter() {
+	if bm.adapter != nil {
+		bm.adapter.Stop()
+	}
 }

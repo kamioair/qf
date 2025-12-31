@@ -20,8 +20,6 @@ static int OnWriteHandler(OnWriteCallback cb, char* respBytes, int respLen, char
 import "C"
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"syscall"
@@ -30,9 +28,7 @@ import (
 )
 
 type plugin struct {
-	service           IService
-	reg               *Reg
-	adapter           easyCon.IAdapter
+	*baseModule       // 嵌入基础模块
 	onWrite           OnWriteDelegate
 	onRead            OnReadDelegate
 	onReadCallbackPtr uintptr
@@ -50,14 +46,10 @@ func NewPlugin(
 	onWrite := createOnWriteAdapter(onWriteCallback)
 
 	p := &plugin{
-		service:           service,
+		baseModule:        newBaseModule(service),
 		onWrite:           onWrite,
 		onReadCallbackPtr: onReadCallbackPtr,
 	}
-
-	// 注册方法
-	p.reg = &Reg{}
-	p.service.Reg(p.reg)
 
 	return p
 }
@@ -71,12 +63,8 @@ func (p *plugin) Run() {
 		fmt.Println("-------------------------------------")
 	}, cfg.module, "init", nil)
 
-	fmt.Println("-------------------------------------")
-	fmt.Println(" Module:", cfg.module)
-	fmt.Println(" Desc:", cfg.desc)
-	fmt.Println(" ModuleVersion:", cfg.version)
-	fmt.Println(" FrameVersion:", Version)
-	fmt.Println("-------------------------------------")
+	// 打印模块信息
+	p.printModuleInfo()
 
 	name := cfg.module
 	if cfg.Broker.IsRandomClientID {
@@ -95,33 +83,17 @@ func (p *plugin) Run() {
 		IsSync:            false,
 	}
 
-	callback := easyCon.AdapterCallBack{
-		OnStatusChanged: p.onState,
-		OnReqRec:        p.onReq,
-		OnRespRec:       nil,
-		OnExiting:       p.onExiting,
-		OnGetVersion:    p.onGetVersion,
-	}
-	if p.reg.OnNotice != nil {
-		callback.OnNoticeRec = p.reg.OnNotice
-	}
-	if p.reg.OnRetainNotice != nil {
-		callback.OnRetainNoticeRec = p.reg.OnRetainNotice
-	}
-	if p.reg.OnLog != nil {
-		callback.OnLogRec = p.reg.OnLog
-	}
+	// 构建回调
+	callback := p.buildAdapterCallBack(p.onState, p.onReq, p.onExiting, p.getVersion)
 
 	p.adapter, p.onRead = easyCon.NewCgoAdapter(setting, callback, p.onWrite)
 
 	// 调用业务的初始化
-	p.service.setEnv(p.reg, p.adapter, nil)
-	if p.reg.OnInit != nil {
-		p.reg.OnInit()
-	}
+	p.setEnv(nil)
+	p.callOnInit()
 
 	// 保存配置文件
-	saveConfigFile(cfg)
+	p.saveConfig()
 
 	// 创建onRead适配器并设置函数指针
 	setOnReadAdapter(p.onRead, p.onReadCallbackPtr)
@@ -131,7 +103,10 @@ func (p *plugin) Run() {
 }
 
 func (p *plugin) Stop() {
-
+	// 调用业务的退出
+	p.callOnStop()
+	// 退出客户端
+	p.stopAdapter()
 }
 
 func (p *plugin) onExiting() {
@@ -139,54 +114,11 @@ func (p *plugin) onExiting() {
 }
 
 func (p *plugin) onState(status easyCon.EStatus) {
-	fmt.Printf("Client link state = [%s]\n", status)
-
-	if p.reg != nil && p.reg.OnStatusChanged != nil {
-		go p.reg.OnStatusChanged(status)
-	}
+	p.callOnState(status)
 }
 
 func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
-	cfg := p.service.config().getBase()
-
-	defer errRecover(func(err string) {
-		code = easyCon.ERespError
-		resp = errors.New(err)
-	}, cfg.module, pack.Route, pack.Content)
-
-	switch pack.Route {
-	case "Exit":
-		p.Stop()
-		return easyCon.ERespSuccess, nil
-	case "Version":
-		ver := map[string]string{}
-		ver["Module"] = cfg.module
-		ver["Desc"] = cfg.desc
-		ver["ModuleVersion"] = cfg.version
-		ver["FrameVersion"] = Version
-		return easyCon.ERespSuccess, ver
-	}
-	if p.reg.OnReq != nil {
-		code, resp = p.reg.OnReq(pack)
-		if code != easyCon.ERespSuccess {
-			// 记录日志
-			str, _ := json.Marshal(pack.Content)
-			errStr := ""
-			if e := resp.(error); e != nil {
-				errStr = e.Error()
-			} else {
-				errStr = fmt.Sprintf("%v", resp)
-			}
-			writeLog(cfg.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
-		}
-		return code, resp
-	}
-	return easyCon.ERespRouteNotFind, "Route Not Matched"
-}
-
-func (p *plugin) onGetVersion() []string {
-	cfg := p.service.config().getBase()
-	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", cfg.version)}
+	return p.handleReq(pack, p.Stop)
 }
 
 // createOnWriteAdapter 创建写入适配器
