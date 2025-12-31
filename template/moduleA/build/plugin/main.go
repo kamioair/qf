@@ -22,28 +22,16 @@ func main() {
 //export Init
 func Init(settingJson *C.char, settingLen C.int, onWriteCallback C.OnWriteCallback, onReadCallbackPtr uintptr) {
 	// 解析qf传入的自定义参数
-	setting := map[string]string{}
+	setting := map[string]any{}
 	err := json.Unmarshal(C.GoBytes(unsafe.Pointer(settingJson), settingLen), &setting)
 	if err != nil {
-		setting = map[string]string{}
+		setting = map[string]any{}
 	}
-	name := moduleA.Name
-	if n, ok := setting["name"]; ok {
-		name = n
-	}
-	
+
 	// 创建配置和服务
-	cfg := moduleA.NewConfig()
-	serv := moduleA.NewService(cfg)
+	serv := moduleA.NewService(setting)
 
 	// 直接使用 qf.NewPlugin，传入 C 回调函数指针
-	qf.NewPlugin(
-		name,
-		moduleA.Desc,
-		moduleA.Version,
-		serv,
-		cfg,
-		uintptr(unsafe.Pointer(onWriteCallback)),
-		onReadCallbackPtr,
-	)
+	module := qf.NewPlugin(serv, uintptr(unsafe.Pointer(onWriteCallback)), onReadCallbackPtr)
+	module.Run()
 }

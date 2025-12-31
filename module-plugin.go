@@ -30,21 +30,19 @@ import (
 )
 
 type plugin struct {
-	service IService
-	reg     *Reg
-	config  *Config
-	adapter easyCon.IAdapter
-	onWrite OnWriteDelegate
-	onRead  OnReadDelegate
+	service           IService
+	reg               *Reg
+	adapter           easyCon.IAdapter
+	onWrite           OnWriteDelegate
+	onRead            OnReadDelegate
+	onReadCallbackPtr uintptr
 }
 
 // NewPlugin 创建CGo插件模块
 // onWriteCallback: C端的写入回调函数指针
 // onReadCallbackPtr: 用于返回Go端的读取回调函数指针的地址
 func NewPlugin(
-	name, desc, version string,
 	service IService,
-	config IConfig,
 	onWriteCallback uintptr,
 	onReadCallbackPtr uintptr,
 ) IModule {
@@ -52,34 +50,26 @@ func NewPlugin(
 	onWrite := createOnWriteAdapter(onWriteCallback)
 
 	p := &plugin{
-		service: service,
-		onWrite: onWrite,
+		service:           service,
+		onWrite:           onWrite,
+		onReadCallbackPtr: onReadCallbackPtr,
 	}
 
 	// 注册方法
 	p.reg = &Reg{}
 	p.service.Reg(p.reg)
 
-	// 加载配置
-	p.config = loadConfig(name, desc, version, config)
-
-	// 运行模块并获取onRead
-	onRead := p.Run().(OnReadDelegate)
-
-	// 创建onRead适配器并设置函数指针
-	setOnReadAdapter(onRead, onReadCallbackPtr)
-
 	return p
 }
 
-func (p *plugin) Run() any {
+func (p *plugin) Run() {
+	cfg := p.service.config().getBase()
+
 	defer errRecover(func(err string) {
 		fmt.Println("")
 		fmt.Println(err)
 		fmt.Println("-------------------------------------")
-	}, p.config.module, "init", nil)
-
-	cfg := p.config
+	}, cfg.module, "init", nil)
 
 	fmt.Println("-------------------------------------")
 	fmt.Println(" Module:", cfg.module)
@@ -125,18 +115,19 @@ func (p *plugin) Run() any {
 	p.adapter, p.onRead = easyCon.NewCgoAdapter(setting, callback, p.onWrite)
 
 	// 调用业务的初始化
-	p.service.setEnv(p.reg, p.adapter, p.config, nil)
+	p.service.setEnv(p.reg, p.adapter, nil)
 	if p.reg.OnInit != nil {
 		p.reg.OnInit()
 	}
 
 	// 保存配置文件
-	saveConfigFile(p.config)
+	saveConfigFile(cfg)
+
+	// 创建onRead适配器并设置函数指针
+	setOnReadAdapter(p.onRead, p.onReadCallbackPtr)
 
 	// 启动成功
 	fmt.Printf("\nStart OK\n\n")
-
-	return p.onRead
 }
 
 func (p *plugin) Stop() {
@@ -156,10 +147,12 @@ func (p *plugin) onState(status easyCon.EStatus) {
 }
 
 func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
+	cfg := p.service.config().getBase()
+
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
 		resp = errors.New(err)
-	}, p.config.module, pack.Route, pack.Content)
+	}, cfg.module, pack.Route, pack.Content)
 
 	switch pack.Route {
 	case "Exit":
@@ -167,7 +160,6 @@ func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		return easyCon.ERespSuccess, nil
 	case "Version":
 		ver := map[string]string{}
-		cfg := p.config
 		ver["Module"] = cfg.module
 		ver["Desc"] = cfg.desc
 		ver["ModuleVersion"] = cfg.version
@@ -185,7 +177,7 @@ func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 			} else {
 				errStr = fmt.Sprintf("%v", resp)
 			}
-			writeLog(p.config.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
+			writeLog(cfg.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
 		}
 		return code, resp
 	}
@@ -193,7 +185,8 @@ func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 }
 
 func (p *plugin) onGetVersion() []string {
-	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", p.config.version)}
+	cfg := p.service.config().getBase()
+	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", cfg.version)}
 }
 
 // createOnWriteAdapter 创建写入适配器

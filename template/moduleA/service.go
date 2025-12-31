@@ -5,17 +5,36 @@ import (
 	easyCon "github.com/qiu-tec/easy-con.golang"
 )
 
+const (
+	Version = "V1.0.251225B01"
+	Name    = "ModuleA"
+	Desc    = "模板模块A"
+)
+
 // Service 模块服务入口
 type Service struct {
 	qf.Service
-	cfg *ConfigStruct
+	cfg *Config
 
 	// 具体业务功能实现
 	bll *bll
 }
 
-func NewService(cfg *ConfigStruct) *Service {
-	serv := &Service{cfg: cfg}
+type Config struct {
+	qf.Config
+
+	// 自定义配置
+	// ...
+}
+
+func NewService(customSetting map[string]any) *Service {
+	serv := &Service{
+		cfg: &Config{
+			// 自定义配置初始值
+			// ...
+		},
+	}
+	serv.Load(Name, Desc, Version, serv.cfg, customSetting)
 	return serv
 }
 

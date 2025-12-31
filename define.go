@@ -7,27 +7,26 @@ import (
 // IModule 模块入口接口
 type IModule interface {
 	// Run 运行模块
-	Run() any
+	Run()
 	// Stop 停止模块
 	Stop()
 }
 
 // IService 模块功能接口
 type IService interface {
-	Reg(reg *Reg)     // 注册事件
-	GetInvokes() *Reg // 返回注册事件
-
-	SendLogDebug(content string)            // 调试日志
-	SendLogWarn(content string)             // 警告日志
-	SendLogError(content string, err error) // 错误日志
+	Reg(reg *Reg)                                                                  // 注册事件
+	GetInvokes() *Reg                                                              // 返回注册事件
+	Load(name, desc, version string, config IConfig, customSetting map[string]any) // 加载模块
 
 	// 内部使用的方法
-	setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config, callback CallbackDelegate)
+	config() IConfig
+	setEnv(reg *Reg, adapter easyCon.IAdapter, callback CallbackDelegate)
 }
 
 // IConfig 配置接口
 type IConfig interface {
-	getBaseConfig() *Config
+	setBase(name, desc, version string)
+	getBase() *Config
 }
 
 // ICrypto 加解密接口

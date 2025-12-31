@@ -10,15 +10,30 @@ import (
 )
 
 type Service struct {
-	adapter  easyCon.IAdapter
-	config   *Config
-	reg      *Reg
-	callback CallbackDelegate
+	moduleName    string
+	moduleDesc    string
+	moduleVersion string
+	adapter       easyCon.IAdapter
+	cfg           IConfig
+	reg           *Reg
+	callback      CallbackDelegate
 }
 
 // GetInvokes 获取绑定事件
 func (bll *Service) GetInvokes() *Reg {
 	return bll.reg
+}
+
+// Load 初始化
+func (bll *Service) Load(name, desc, version string, config IConfig, customSetting map[string]any) {
+	bll.cfg = config
+	if bll.cfg == nil {
+		bll.cfg = &emptyConfig{}
+	}
+	// 设置模块信息
+	bll.cfg.setBase(name, desc, version)
+	// 加载配置
+	loadConfig(bll.cfg, customSetting)
 }
 
 // Invoke 调用请求实现方法
@@ -27,7 +42,7 @@ func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (code easyCon.
 		code = easyCon.ERespError
 		resp = errors.New(err)
 		bll.SendLogError("invoke panic", errors.New(fmt.Sprintf("code = %s, error = %s", code, resp)))
-	}, bll.config.module, pack.Route, pack.Content)
+	}, bll.cfg.getBase().module, pack.Route, pack.Content)
 
 	// 创建上下文
 	ctx, err := newContent(pack.Content, &pack, nil, nil)
@@ -94,7 +109,7 @@ func (bll *Service) SendRequestWithTimeout(module, route string, params any, tim
 
 // SendNotice 发送通知
 func (bll *Service) SendNotice(route string, content any) {
-	cfg := bll.config.CallBack.Notice
+	cfg := bll.cfg.getBase().CallBack.Notice
 	if cfg == ECallBackAll || cfg == ECallBackUp {
 		err := bll.adapter.SendNotice(route, content)
 		if err != nil {
@@ -107,7 +122,7 @@ func (bll *Service) SendNotice(route string, content any) {
 
 // SendRetainNotice 发送保持通知
 func (bll *Service) SendRetainNotice(route string, content any) {
-	cfg := bll.config.CallBack.Notice
+	cfg := bll.cfg.getBase().CallBack.Notice
 	if cfg == ECallBackAll || cfg == ECallBackUp {
 		err := bll.adapter.SendRetainNotice(route, content)
 		if err != nil {
@@ -121,7 +136,7 @@ func (bll *Service) SendRetainNotice(route string, content any) {
 // SendLogDebug 发送Debug日志
 func (bll *Service) SendLogDebug(content string) {
 	fmt.Println(fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), content))
-	cfg := bll.config.CallBack.Notice
+	cfg := bll.cfg.getBase().CallBack.Notice
 	if cfg == ECallBackAll || cfg == ECallBackUp {
 		bll.adapter.Debug(content)
 	}
@@ -130,7 +145,7 @@ func (bll *Service) SendLogDebug(content string) {
 
 // SendLogWarn 发送Warn日志
 func (bll *Service) SendLogWarn(content string) {
-	cfg := bll.config.CallBack.Notice
+	cfg := bll.cfg.getBase().CallBack.Notice
 	if cfg == ECallBackAll || cfg == ECallBackUp {
 		bll.adapter.Warn(content)
 	}
@@ -144,9 +159,9 @@ func (bll *Service) SendLogError(content string, err error) {
 	if err != nil {
 		errStr = err.Error()
 	}
-	writeLog(bll.config.module, "Error", content, errStr)
+	writeLog(bll.cfg.getBase().module, "Error", content, errStr)
 
-	cfg := bll.config.CallBack.Notice
+	cfg := bll.cfg.getBase().CallBack.Notice
 	if cfg == ECallBackAll || cfg == ECallBackUp {
 		bll.adapter.Err(content, err)
 	}
@@ -154,7 +169,7 @@ func (bll *Service) SendLogError(content string, err error) {
 }
 
 func (bll *Service) sendCallback(pType easyCon.EPType, route string, content any) {
-	cfg := bll.config.CallBack.Notice
+	cfg := bll.cfg.getBase().CallBack.Notice
 	if (cfg == ECallBackAll || cfg == ECallBackBack) && bll.callback != nil {
 		ctx := ""
 		if v, ok := content.(string); ok == true {
@@ -176,9 +191,12 @@ func (bll *Service) sendCallback(pType easyCon.EPType, route string, content any
 	}
 }
 
-func (bll *Service) setEnv(reg *Reg, adapter easyCon.IAdapter, config *Config, callback CallbackDelegate) {
+func (bll *Service) config() IConfig {
+	return bll.cfg
+}
+
+func (bll *Service) setEnv(reg *Reg, adapter easyCon.IAdapter, callback CallbackDelegate) {
 	bll.reg = reg
 	bll.adapter = adapter
-	bll.config = config
 	bll.callback = callback
 }

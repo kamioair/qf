@@ -1,14 +1,10 @@
 package qf
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/kamioair/utils/qconfig"
 	"github.com/kamioair/utils/qio"
 	"os"
-	"regexp"
-	"strconv"
-	"strings"
 )
 
 type Config struct {
@@ -66,14 +62,20 @@ func (c *Config) SetCustomSection(section string) {
 	c.customSection = section
 }
 
-// getBaseConfig 获取基础配置（供内部module.go调用）
-func (c *Config) getBaseConfig() *Config {
+// getBase 获取基础配置（供内部module.go调用）
+func (c *Config) getBase() *Config {
 	return c
 }
 
-// loadConfig 加载配置文件
-func loadConfig(name, desc, version string, config IConfig) *Config {
+// setBase 设置基础配置
+func (c *Config) setBase(name, desc, version string) {
+	c.module = name
+	c.desc = desc
+	c.version = version
+}
 
+// loadConfig 加载配置文件
+func loadConfig(config IConfig, customSetting map[string]any) *Config {
 	// 修改系统路径为当前目录
 	err := os.Chdir(qio.GetCurrentDirectory())
 	if err != nil {
@@ -85,41 +87,9 @@ func loadConfig(name, desc, version string, config IConfig) *Config {
 	}
 
 	// 加载基础配置
-	baseCfg := initBaseConfig(name, desc, version, config)
-	fileExist := qio.PathExists(baseCfg.filePath)
-	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
-	if err != nil {
-		panic(err)
-	}
-	// 如果有外部传入参数，则更新配置
-	setByArgs(baseCfg)
-
-	// 加载模块自定义配置
-	section := baseCfg.customSection
-	if section == "" {
-		section = name
-	}
-	err = qconfig.LoadConfig(baseCfg.filePath, section, config)
-	if err != nil {
-		panic(err)
-	}
-
-	// 首次创建配置文件，立即保存
-	if fileExist == false {
-		saveConfigFile(baseCfg)
-	}
-
-	return config.getBaseConfig()
-}
-
-// initBaseConfig 初始化基础默认配置
-func initBaseConfig(name, desc, version string, c IConfig) *Config {
-	config := c.getBaseConfig()
-	config.module = name
-	config.desc = desc
-	config.version = version
-	config.filePath = "./config.yaml"
-	config.Broker = struct {
+	baseCfg := config.getBase()
+	baseCfg.filePath = "./config.yaml"
+	baseCfg.Broker = struct {
 		Addr             string // 地址
 		UId              string // 用户名
 		Pwd              string // 密码
@@ -141,86 +111,46 @@ func initBaseConfig(name, desc, version string, c IConfig) *Config {
 		IsRandomClientID: false,
 		IsSyncMode:       false,
 	}
-	config.CallBack = struct {
+	baseCfg.CallBack = struct {
 		Notice string
 		Log    string
 	}{
 		Notice: "All",
 		Log:    "All",
 	}
-
-	return config
-}
-
-// setByArgs 根据外部传参更新基础配置
-func setByArgs(config *Config) {
-	defer func() {
-		if r := recover(); r != nil {
-
+	// 如果有外部传入参数，则更新配置
+	if customSetting != nil {
+		// 自定义配置文件路径
+		if val, ok := customSetting["ConfigPath"]; ok {
+			baseCfg.filePath = val.(string)
 		}
-	}()
-
-	// 如果有入参，则用入参（仅处理ConfigPath，其他参数在loadConfig中处理）
-	if len(os.Args) > 1 {
-		args := map[string]any{}
-		err := json.Unmarshal([]byte(os.Args[1]), &args)
-		if err == nil {
-			// 自定义配置文件路径
-			if val, ok := args["ConfigPath"]; ok {
-				config.filePath = val.(string)
-			}
-			// 自定义模块名称
-			if val, ok := args["Module"]; ok && val != "" {
-				config.module = val.(string)
-			}
-			// 自定义Broker配置
-			if val, ok := args["Broker"]; ok {
-				err = json.Unmarshal([]byte(val.(string)), &config.Broker)
-				if err != nil {
-					panic(err)
-				}
-			}
+		// 自定义模块名称
+		if val, ok := customSetting["Module"]; ok && val != "" {
+			baseCfg.module = val.(string)
 		}
 	}
-	// 其他扩展参数
-	if len(os.Args) > 2 {
-		args := map[string]string{}
-		for i := 2; i < len(os.Args); i += 2 {
-			if i+1 >= len(os.Args) {
-				break
-			}
-			key := os.Args[i]
-			value := os.Args[i+1]
-			args[key] = value
-		}
-		for key, value := range args {
-			switch key {
-			case "-exit":
-				config.exit = value
-			case "-port":
-				// 重新设置端口
-				port, _ := strconv.Atoi(value)
-				a1, a2, a3, e := splitWebSocketURLRegex(config.Broker.Addr)
-				if e == nil && strings.Contains(a2, ":") {
-					sp := strings.Split(a2, ":")
-					config.Broker.Addr = fmt.Sprintf("%s%s:%d%s", a1, sp[0], port, a3)
-				}
-			}
-		}
-	}
-}
-
-// splitWebSocketURLRegex 拆分broker连接地址
-func splitWebSocketURLRegex(url string) (string, string, string, error) {
-	pattern := `^(.+://)([^/]+)(/.+)$`
-	re := regexp.MustCompile(pattern)
-
-	matches := re.FindStringSubmatch(url)
-	if len(matches) != 4 {
-		return "", "", "", fmt.Errorf("invalid URL format")
+	fileExist := qio.PathExists(baseCfg.filePath)
+	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
+	if err != nil {
+		panic(err)
 	}
 
-	return matches[1], matches[2], matches[3], nil
+	// 加载模块自定义配置
+	section := baseCfg.customSection
+	if section == "" {
+		section = baseCfg.module
+	}
+	err = qconfig.LoadConfig(baseCfg.filePath, section, config)
+	if err != nil {
+		panic(err)
+	}
+
+	// 首次创建配置文件，立即保存
+	if fileExist == false {
+		saveConfigFile(baseCfg)
+	}
+
+	return config.getBase()
 }
 
 // saveConfigFile 保存配置文件（供内部module.go调用）

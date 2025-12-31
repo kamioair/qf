@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kamioair/utils/qconvert"
 	"github.com/kamioair/utils/qlauncher"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"sync"
@@ -11,26 +12,25 @@ import (
 )
 
 // NewModule 创建Cmd模块
-func NewModule(name, desc, version string, service IService, config IConfig) IModule {
-	return newModule(name, desc, version, service, config, nil)
+func NewModule(service IService) IModule {
+	return newModule(service, nil)
 }
 
 // NewDllModule 创建Dll模块
-func NewDllModule(name, desc, version string, service IService, config IConfig, callback CallbackDelegate) IModule {
-	return newModule(name, desc, version, service, config, callback)
+func NewDllModule(service IService, callback CallbackDelegate) IModule {
+	return newModule(service, callback)
 }
 
 type module struct {
 	service         IService
 	reg             *Reg
-	config          *Config
 	adapter         easyCon.IAdapter
 	waitConnectChan chan bool
 	waitLock        sync.Mutex
 	callback        CallbackDelegate
 }
 
-func newModule(name, desc, version string, service IService, config IConfig, callback CallbackDelegate) IModule {
+func newModule(service IService, callback CallbackDelegate) IModule {
 	if service == nil {
 		panic(errors.New("service cannot be nil"))
 	}
@@ -47,13 +47,11 @@ func newModule(name, desc, version string, service IService, config IConfig, cal
 	m.reg = &Reg{}
 	m.service.Reg(m.reg)
 
-	// 加载配置
-	m.config = loadConfig(name, desc, version, config)
 	return m
 }
 
 // Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
-func (m *module) Run() any {
+func (m *module) Run() {
 	if m.callback != nil {
 		// dll模式
 		m.start()
@@ -61,7 +59,6 @@ func (m *module) Run() any {
 		// cmd模式
 		qlauncher.Run(m.start, m.stop, false)
 	}
-	return true
 }
 
 // Stop 停止模块
@@ -75,16 +72,16 @@ func (m *module) Stop() {
 }
 
 func (m *module) start() {
+	cfg := m.service.config().getBase()
+
 	defer errRecover(func(err string) {
 		fmt.Println("")
 		fmt.Println(err)
 		fmt.Println("-------------------------------------")
-	}, m.config.module, "init", nil)
+	}, cfg.module, "init", nil)
 
 	m.waitConnectChan = make(chan bool)
 	m.waitLock = sync.Mutex{}
-
-	cfg := m.config
 
 	fmt.Println("-------------------------------------")
 	fmt.Println(" Module:", cfg.module)
@@ -116,8 +113,12 @@ func (m *module) start() {
 	}
 
 	fmt.Printf("Connecting Broker... (Addr: %s) ", addr)
+	name := cfg.module
+	if cfg.Broker.IsRandomClientID {
+		name = fmt.Sprintf("%s-%s", name, qconvert.Time.ToString(time.Now(), "yyyyMMddHHmmssfff"))
+	}
 	// 创建easyCon客户端
-	setting := easyCon.NewDefaultMqttSetting(cfg.module, addr)
+	setting := easyCon.NewDefaultMqttSetting(name, addr)
 	setting.UID = uid
 	setting.PWD = pwd
 	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
@@ -125,6 +126,7 @@ func (m *module) start() {
 	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
 	setting.PreFix = cfg.Broker.Prefix
 	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
+	setting.IsSync = cfg.Broker.IsSyncMode
 	callback := easyCon.AdapterCallBack{
 		OnStatusChanged: m.onState,
 		OnReqRec:        m.onReq,
@@ -143,7 +145,7 @@ func (m *module) start() {
 	}
 	// 创建模块链接
 	m.adapter = easyCon.NewMqttAdapter(setting, callback)
-	m.service.setEnv(m.reg, m.adapter, m.config, m.callback)
+	m.service.setEnv(m.reg, m.adapter, m.callback)
 
 	// 等待连接成功
 	time.Sleep(time.Millisecond * 1)
@@ -211,10 +213,12 @@ func (m *module) onState(status easyCon.EStatus) {
 }
 
 func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
+	cfg := m.service.config().getBase()
+
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
 		resp = errors.New(err)
-	}, m.config.module, pack.Route, pack.Content)
+	}, cfg.module, pack.Route, pack.Content)
 
 	switch pack.Route {
 	case "Exit":
@@ -222,7 +226,6 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		return easyCon.ERespSuccess, nil
 	case "Version":
 		ver := map[string]string{}
-		cfg := m.config
 		ver["Module"] = cfg.module
 		ver["Desc"] = cfg.desc
 		ver["ModuleVersion"] = cfg.version
@@ -240,7 +243,7 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 			} else {
 				errStr = fmt.Sprintf("%v", resp)
 			}
-			writeLog(m.config.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
+			writeLog(cfg.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
 		}
 		return code, resp
 	}
@@ -248,5 +251,6 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 }
 
 func (m *module) onGetVersion() []string {
-	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", m.config.version)}
+	cfg := m.service.config().getBase()
+	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", cfg.version)}
 }
