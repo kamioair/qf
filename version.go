@@ -1,3 +1,3 @@
 package qf
 
-const Version = "V1.3.251225B01"
+const Version = "V1.4.260110B01"
