@@ -20,6 +20,7 @@ type Service struct {
 	bll *bll
 }
 
+// Config 自定义配置
 type Config struct {
 	qf.Config
 
@@ -27,6 +28,7 @@ type Config struct {
 	// ...
 }
 
+// NewService 创建功能实现入口
 func NewService(customSetting map[string]any) *Service {
 	serv := &Service{
 		cfg: &Config{
@@ -34,6 +36,7 @@ func NewService(customSetting map[string]any) *Service {
 			// ...
 		},
 	}
+	// 加载配置
 	serv.Load(Name, Desc, Version, serv.cfg, customSetting)
 	return serv
 }
@@ -55,6 +58,10 @@ func (serv *Service) onReq(pack easyCon.PackReq) (easyCon.EResp, any) {
 	switch pack.Route {
 	case "MethodA":
 		return serv.Invoke(pack, serv.bll.MethodA)
+	case "MethodB":
+		return serv.Invoke(pack, serv.bll.MethodB)
+	case "MethodC":
+		return serv.Invoke(pack, serv.bll.MethodC)
 	}
 	return serv.ReturnNotFind()
 }

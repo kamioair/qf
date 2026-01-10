@@ -31,7 +31,7 @@ func Init(settingJson *C.char, settingLen C.int, onWriteCallback C.OnWriteCallba
 	// 创建配置和服务
 	serv := moduleA.NewService(setting)
 
-	// 直接使用 qf.NewPlugin，传入 C 回调函数指针
+	// 启动插件
 	module := qf.NewPlugin(serv, uintptr(unsafe.Pointer(onWriteCallback)), onReadCallbackPtr)
 	module.Run()
 }
