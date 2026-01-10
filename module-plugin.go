@@ -102,6 +102,10 @@ func (p *plugin) Run() {
 	fmt.Printf("\nStart OK\n\n")
 }
 
+func (p *plugin) RunAsync() {
+	p.Run()
+}
+
 func (p *plugin) Stop() {
 	// 调用业务的退出
 	p.callOnStop()

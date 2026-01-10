@@ -37,13 +37,14 @@ func newModule(service IService, callback CallbackDelegate) IModule {
 
 // Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
 func (m *module) Run() {
-	if m.callback != nil {
-		// dll模式
-		m.start()
-	} else {
-		// cmd模式
-		qlauncher.Run(m.start, m.stop, false)
-	}
+	// cmd模式
+	qlauncher.Run(m.start, m.stop, false)
+}
+
+// RunAsync 异步运行模块，执行后不等待
+func (m *module) RunAsync() {
+	// dll模式
+	m.start()
 }
 
 // Stop 停止模块

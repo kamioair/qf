@@ -14,28 +14,21 @@ func (t *testService) Reg(reg *Reg) {
 
 }
 
-func (t *testService) config() IConfig {
-	cfg := &Config{}
-	cfg.module = "TestModule"
-	cfg.desc = "测试模块"
-	cfg.version = "1.0.0"
-	return cfg
-}
-
 // NewTest 创建测试用例, 入参为需要测试的模块
 func NewTest(modules ...IModule) *Test {
 	t := &Test{
 		modules:     modules,
 		testService: &testService{},
 	}
+	t.testService.Load("TestModule", "测试模块", "1.0.0", nil, nil)
 
 	// 创建用例模块
 	t.testModule = NewModule(t.testService)
-	t.testModule.Run()
+	t.testModule.RunAsync()
 
 	// 启动测试模块
 	for _, m := range modules {
-		m.Run()
+		m.RunAsync()
 	}
 
 	return t

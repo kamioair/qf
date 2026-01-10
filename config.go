@@ -27,17 +27,7 @@ type Config struct {
 		IsRandomClientID bool   // 是否随机clientID
 		IsSyncMode       bool   // 是否同步模式
 	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:请求超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀，用于同一个模块不同实例\n LinkTimeOut:连接等待超时(毫秒) 0表示无限等待直到连上\n IsRandomClientID:是否随机clientID\n IsSyncMode:是否请求同步模式，启用后所有请求无法并行，只能一个一个执行"` // 服务连接配置
-	CallBack struct {
-		Notice string
-		Log    string
-	} `comment:"CallBack回调配置 Back/Up/All\n Notice:通知回调\n Log:日志回调"`
 }
-
-const (
-	ECallBackBack = "Back"
-	ECallBackUp   = "Up"
-	ECallBackAll  = "All"
-)
 
 type emptyConfig struct {
 	Config
@@ -105,16 +95,9 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 		TimeOut:          3000,
 		Retry:            3,
 		LogMode:          "NONE",
-		LinkTimeOut:      3000,
+		LinkTimeOut:      1000,
 		IsRandomClientID: false,
 		IsSyncMode:       false,
-	}
-	baseCfg.CallBack = struct {
-		Notice string
-		Log    string
-	}{
-		Notice: "All",
-		Log:    "All",
 	}
 	// 如果有外部传入参数，则更新配置
 	if customSetting != nil {
@@ -123,7 +106,7 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 			baseCfg.filePath = val.(string)
 		}
 		// 自定义模块名称
-		if val, ok := customSetting["Module"]; ok && val != "" {
+		if val, ok := customSetting["ModuleName"]; ok && val != "" {
 			baseCfg.module = val.(string)
 		}
 	}
@@ -155,23 +138,22 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 // saveConfigFile 保存配置文件（供内部module.go调用）
 func saveConfigFile(config IConfig) {
 	baseCfg := config.getBase()
+
 	// 准备保存选项
-	save := map[string]qconfig.SaveData{}
-	save["Base"] = qconfig.SaveData{
-		Content: baseCfg,
-		Desc:    "模块基础配置",
-	}
+	saveContent := qconfig.SaveContent{}
+
+	// 基础配置
+	saveContent.Add("Base", "模块基础配置", baseCfg)
+
+	// 模块自定义配置
 	section := baseCfg.customSection
 	if section == "" {
 		section = baseCfg.module
 	}
-	save[section] = qconfig.SaveData{
-		Content: config,
-		Desc:    baseCfg.desc,
-	}
+	saveContent.Add(section, baseCfg.desc, config)
 
 	// 保存配置
-	err := qconfig.SaveConfig(baseCfg.filePath, save)
+	err := qconfig.SaveConfig(baseCfg.filePath, saveContent)
 	if err != nil {
 		fmt.Printf("保存配置文件失败: %v\n", err)
 	}

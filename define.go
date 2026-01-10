@@ -15,8 +15,10 @@ import (
 
 // IModule 模块入口接口
 type IModule interface {
-	// Run 运行模块
+	// Run 同步运行模块，执行后会等待直到程序退出
 	Run()
+	// RunAsync 异步运行模块，执行后不等待
+	RunAsync()
 	// Stop 停止模块
 	Stop()
 }
