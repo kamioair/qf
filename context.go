@@ -47,8 +47,12 @@ func (c *context) Raw() string {
 }
 
 func (c *context) Bind(refStruct any) error {
-	raw := c.raw
+	// 安全检查：确保 refStruct 不为 nil
+	if refStruct == nil {
+		return fmt.Errorf("refStruct cannot be nil")
+	}
 
+	raw := c.raw
 	// 先尝试直接解析为JSON
 	err := json.Unmarshal([]byte(raw), refStruct)
 	if err == nil {
@@ -58,9 +62,16 @@ func (c *context) Bind(refStruct any) error {
 	// 如果JSON解析失败，尝试智能转换
 	switch v := refStruct.(type) {
 	case *string:
+		// 额外检查：确保指针本身不为 nil
+		if v == nil {
+			return fmt.Errorf("string pointer is nil")
+		}
 		*v = raw
 		return nil
 	case *int:
+		if v == nil {
+			return fmt.Errorf("int pointer is nil")
+		}
 		num, err := strconv.Atoi(raw)
 		if err != nil {
 			return err
@@ -68,6 +79,9 @@ func (c *context) Bind(refStruct any) error {
 		*v = num
 		return nil
 	case *float64:
+		if v == nil {
+			return fmt.Errorf("float64 pointer is nil")
+		}
 		num, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
 			return err
@@ -75,6 +89,9 @@ func (c *context) Bind(refStruct any) error {
 		*v = num
 		return nil
 	case *bool:
+		if v == nil {
+			return fmt.Errorf("bool pointer is nil")
+		}
 		b, err := strconv.ParseBool(raw)
 		if err != nil {
 			return err

@@ -34,10 +34,12 @@ func NewTest(modules ...IModule) *Test {
 	return t
 }
 
+// Invoke 执行方法
 func (t *Test) Invoke(moduleName string, route string, params any) (IContext, error) {
-	return t.testService.SendRequest(moduleName, route, params)
+	return t.testService.SendRequestWithTimeout(moduleName, route, params, 60000)
 }
 
+// InvokeWithTimeout 执行方法，并自定义超时时间，单位毫秒
 func (t *Test) InvokeWithTimeout(moduleName string, route string, params any, timeout int) (IContext, error) {
 	return t.testService.SendRequestWithTimeout(moduleName, route, params, timeout)
 }
