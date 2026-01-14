@@ -18,7 +18,7 @@ func TestName(t *testing.T) {
 	test := qf.NewTest(module1, module2)
 
 	// 测试业务功能
-	respA, err := test.Invoke("ModuleA.Test1", "MethodA", nil)
+	respA, err := test.Invoke("ModuleA.Test1", "MethodA", "hello methodA")
 	if err != nil {
 		t.Fatal(err)
 	}

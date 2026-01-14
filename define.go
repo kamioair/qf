@@ -54,6 +54,10 @@ type IContext interface {
 	Bind(refStruct any) error
 }
 
+// Void 空值
+type Void struct {
+}
+
 // Reg 事件绑定
 type Reg struct {
 	OnInit          func()
@@ -85,12 +89,80 @@ type CallbackReq struct {
 	Content string
 }
 
-// Invoke 执行方法
-func Invoke[Req, Resp any](pack easyCon.PackReq, method func(req Req) (*Resp, easyCon.EResp, error)) (code easyCon.EResp, resp any) {
+//
+//// Invoke 执行方法
+//func Invoke[Req, Resp any](pack easyCon.PackReq, method func(req Req) (Resp, easyCon.EResp, error)) (code easyCon.EResp, resp any) {
+//	defer errRecover(func(err string) {
+//		code = easyCon.ERespError
+//		resp = errors.New(err)
+//	}, pack.To, pack.Route, pack.Content)
+//
+//	// 创建上下文
+//	ctx, err := newContent(pack.Content, &pack, nil, nil)
+//	if err != nil {
+//		return easyCon.ERespBadReq, err
+//	}
+//
+//	// 获取入参
+//	var req Req
+//	err = ctx.Bind(&req)
+//	if err != nil {
+//		return easyCon.ERespBadReq, err
+//	}
+//
+//	// 执行方法并返回
+//	resp, code, err = method(req)
+//	if code != easyCon.ERespSuccess {
+//		return code, err
+//	}
+//	return code, resp
+//}
+//
+//// InvokeNoResp 执行方法（无返回）
+//func InvokeNoResp[Req any](pack easyCon.PackReq, method func(req Req) (easyCon.EResp, error)) (code easyCon.EResp, resp any) {
+//	defer errRecover(func(err string) {
+//		code = easyCon.ERespError
+//		resp = errors.New(err)
+//	}, pack.To, pack.Route, pack.Content)
+//
+//	// 创建上下文
+//	ctx, err := newContent(pack.Content, &pack, nil, nil)
+//	if err != nil {
+//		return easyCon.ERespBadReq, err
+//	}
+//
+//	// 获取入参
+//	var req Req
+//	err = ctx.Bind(&req)
+//	if err != nil {
+//		return easyCon.ERespBadReq, err
+//	}
+//
+//	// 执行方法并返回
+//	code, err = method(req)
+//	if code != easyCon.ERespSuccess {
+//		return code, err
+//	}
+//	return code, nil
+//}
+
+func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp any) {
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
 		resp = errors.New(err)
 	}, pack.To, pack.Route, pack.Content)
+
+	// 验证
+	v := reflect.ValueOf(method)
+	if !v.IsValid() {
+		return easyCon.ERespError, errors.New("invalid method")
+	}
+
+	t := v.Type()
+	// 检查是否是函数
+	if t.Kind() != reflect.Func {
+		return easyCon.ERespError, errors.New(fmt.Sprintf("not a function: %T\n", method))
+	}
 
 	// 创建上下文
 	ctx, err := newContent(pack.Content, &pack, nil, nil)
@@ -98,39 +170,50 @@ func Invoke[Req, Resp any](pack easyCon.PackReq, method func(req Req) (*Resp, ea
 		return easyCon.ERespBadReq, err
 	}
 
-	// 获取入参
-	var req Req
-	kind := reflect.TypeOf(req).Kind()
-	if kind == reflect.String {
+	// 获取函数参数个数
+	numIn := t.NumIn()
 
-	}
-	err = ctx.Bind(&req)
-	if err != nil {
-		return easyCon.ERespBadReq, err
+	var args []reflect.Value
+
+	if numIn > 0 {
+		paramType := t.In(0)
+		if paramType.Kind() == reflect.String {
+			args = []reflect.Value{reflect.ValueOf(ctx.Raw())}
+		} else {
+			obj := reflect.New(paramType).Interface()
+			err = ctx.Bind(&obj)
+			if err != nil {
+				return easyCon.ERespBadReq, err
+			}
+			args = []reflect.Value{reflect.ValueOf(obj).Elem()}
+		}
 	}
 
-	// 执行方法并返回
-	resp, code, err = method(req)
-	if code != easyCon.ERespSuccess {
-		return code, err
-	}
-	return code, resp
-}
+	// 调用方法
+	results := v.Call(args)
 
-// InvokeNoParam 执行方法（无参数）
-func InvokeNoParam[Resp any](pack easyCon.PackReq, method func() (*Resp, easyCon.EResp, error)) (code easyCon.EResp, resp any) {
-	defer errRecover(func(err string) {
-		code = easyCon.ERespError
-		resp = errors.New(err)
-	}, pack.To, pack.Route, pack.Content)
-
-	// 执行方法并返回
-	var err error
-	resp, code, err = method()
-	if code != easyCon.ERespSuccess {
-		return code, err
+	// 处理返回
+	if len(results) == 2 {
+		code = results[0].Interface().(easyCon.EResp)
+		if results[1].Interface() != nil {
+			err = results[1].Interface().(error)
+		}
+		if code != easyCon.ERespSuccess {
+			return code, err
+		}
+		return code, nil
+	} else if len(results) == 3 {
+		resp = results[0].Interface()
+		code = results[1].Interface().(easyCon.EResp)
+		if results[2].Interface() != nil {
+			err = results[2].Interface().(error)
+		}
+		if code != easyCon.ERespSuccess {
+			return code, err
+		}
+		return code, resp
 	}
-	return code, resp
+	return easyCon.ERespError, errors.New("invalid return count, need any,code,error or code,error")
 }
 
 // @Description: Panic的异常收集

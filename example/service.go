@@ -57,7 +57,7 @@ func (serv *Service) onInit() {
 func (serv *Service) onReq(pack easyCon.PackReq) (easyCon.EResp, any) {
 	switch pack.Route {
 	case "MethodA":
-		return qf.InvokeNoParam(pack, serv.bll.MethodA)
+		return qf.Invoke(pack, serv.bll.MethodA)
 	case "MethodB":
 		return qf.Invoke(pack, serv.bll.MethodB)
 	case "MethodC":

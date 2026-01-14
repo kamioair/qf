@@ -52,6 +52,11 @@ func (c *context) Bind(refStruct any) error {
 		return fmt.Errorf("refStruct cannot be nil")
 	}
 
+	if _, ok := refStruct.(Void); ok {
+		refStruct = Void{}
+		return nil
+	}
+
 	raw := c.raw
 	// 先尝试直接解析为JSON
 	err := json.Unmarshal([]byte(raw), refStruct)
