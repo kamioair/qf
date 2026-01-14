@@ -19,8 +19,8 @@ type Service struct {
 	callback      CallbackDelegate
 }
 
-// GetInvokes 获取绑定事件
-func (bll *Service) GetInvokes() *Reg {
+// GetRegEvents 获取注册绑定事件
+func (bll *Service) GetRegEvents() *Reg {
 	return bll.reg
 }
 
@@ -34,26 +34,6 @@ func (bll *Service) Load(name, desc, version string, config IConfig, customSetti
 	bll.cfg.setBase(name, desc, version)
 	// 加载配置
 	loadConfig(bll.cfg, customSetting)
-}
-
-// Invoke 调用请求实现方法
-func (bll *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (code easyCon.EResp, resp any) {
-	defer errRecover(func(err string) {
-		code = easyCon.ERespError
-		resp = errors.New(err)
-		bll.SendLogError("invoke panic", errors.New(fmt.Sprintf("code = %s, error = %s", code, resp)))
-	}, bll.cfg.getBase().module, pack.Route, pack.Content)
-
-	// 创建上下文
-	ctx, err := newContent(pack.Content, &pack, nil, nil)
-	if err != nil {
-		return easyCon.ERespBadReq, err
-	}
-	res, err := onReq(ctx)
-	if err != nil {
-		return easyCon.ERespError, err
-	}
-	return easyCon.ERespSuccess, res
 }
 
 // NoticeInvoke 调用通知实现方法

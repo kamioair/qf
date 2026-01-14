@@ -11,7 +11,7 @@ import "C"
 import (
 	"encoding/json"
 	"github.com/kamioair/qf"
-	"moduleA"
+	"github.com/kamioair/qf/example"
 	"unsafe"
 )
 
@@ -29,7 +29,7 @@ func Init(settingJson *C.char, settingLen C.int, onWriteCallback C.OnWriteCallba
 	}
 
 	// 创建配置和服务
-	serv := moduleA.NewService(setting)
+	serv := example.NewService(setting)
 
 	// 启动插件
 	module := qf.NewPlugin(serv, uintptr(unsafe.Pointer(onWriteCallback)), onReadCallbackPtr)

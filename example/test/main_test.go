@@ -3,7 +3,7 @@ package test
 import (
 	"fmt"
 	"github.com/kamioair/qf"
-	"moduleA"
+	"github.com/kamioair/qf/example"
 	"testing"
 )
 
@@ -11,8 +11,8 @@ func TestName(t *testing.T) {
 	// 需要先启动Broker再测试
 
 	// 创建模块
-	module1 := qf.NewModule(moduleA.NewService(map[string]any{"ModuleName": "ModuleA.Test1"}))
-	module2 := qf.NewModule(moduleA.NewService(map[string]any{"ModuleName": "ModuleA.Test2"}))
+	module1 := qf.NewModule(example.NewService(map[string]any{"ModuleName": "ModuleA.Test1"}))
+	module2 := qf.NewModule(example.NewService(map[string]any{"ModuleName": "ModuleA.Test2"}))
 
 	// 创建测试器
 	test := qf.NewTest(module1, module2)

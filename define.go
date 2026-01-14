@@ -2,11 +2,13 @@ package qf
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/kamioair/utils/qconvert"
 	"github.com/kamioair/utils/qio"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -26,7 +28,7 @@ type IModule interface {
 // IService 模块功能接口
 type IService interface {
 	Reg(reg *Reg)                                                                  // 注册事件
-	GetInvokes() *Reg                                                              // 返回注册事件
+	GetRegEvents() *Reg                                                            // 返回注册事件
 	Load(name, desc, version string, config IConfig, customSetting map[string]any) // 加载模块
 
 	// 内部使用的方法
@@ -81,6 +83,54 @@ type CallbackReq struct {
 	ReqTime string
 	Route   string
 	Content string
+}
+
+// Invoke 执行方法
+func Invoke[Req, Resp any](pack easyCon.PackReq, method func(req Req) (*Resp, easyCon.EResp, error)) (code easyCon.EResp, resp any) {
+	defer errRecover(func(err string) {
+		code = easyCon.ERespError
+		resp = errors.New(err)
+	}, pack.To, pack.Route, pack.Content)
+
+	// 创建上下文
+	ctx, err := newContent(pack.Content, &pack, nil, nil)
+	if err != nil {
+		return easyCon.ERespBadReq, err
+	}
+
+	// 获取入参
+	var req Req
+	kind := reflect.TypeOf(req).Kind()
+	if kind == reflect.String {
+
+	}
+	err = ctx.Bind(&req)
+	if err != nil {
+		return easyCon.ERespBadReq, err
+	}
+
+	// 执行方法并返回
+	resp, code, err = method(req)
+	if code != easyCon.ERespSuccess {
+		return code, err
+	}
+	return code, resp
+}
+
+// InvokeNoParam 执行方法（无参数）
+func InvokeNoParam[Resp any](pack easyCon.PackReq, method func() (*Resp, easyCon.EResp, error)) (code easyCon.EResp, resp any) {
+	defer errRecover(func(err string) {
+		code = easyCon.ERespError
+		resp = errors.New(err)
+	}, pack.To, pack.Route, pack.Content)
+
+	// 执行方法并返回
+	var err error
+	resp, code, err = method()
+	if code != easyCon.ERespSuccess {
+		return code, err
+	}
+	return code, resp
 }
 
 // @Description: Panic的异常收集

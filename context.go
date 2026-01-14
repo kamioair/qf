@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	easyCon "github.com/qiu-tec/easy-con.golang"
+	"strconv"
 )
 
 type context struct {
@@ -46,7 +47,44 @@ func (c *context) Raw() string {
 }
 
 func (c *context) Bind(refStruct any) error {
-	return json.Unmarshal([]byte(c.raw), refStruct)
+	raw := c.raw
+
+	// 先尝试直接解析为JSON
+	err := json.Unmarshal([]byte(raw), refStruct)
+	if err == nil {
+		return nil
+	}
+
+	// 如果JSON解析失败，尝试智能转换
+	switch v := refStruct.(type) {
+	case *string:
+		*v = raw
+		return nil
+	case *int:
+		num, err := strconv.Atoi(raw)
+		if err != nil {
+			return err
+		}
+		*v = num
+		return nil
+	case *float64:
+		num, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return err
+		}
+		*v = num
+		return nil
+	case *bool:
+		b, err := strconv.ParseBool(raw)
+		if err != nil {
+			return err
+		}
+		*v = b
+		return nil
+	default:
+		// 对于其他类型，返回原始的JSON错误
+		return err
+	}
 }
 
 func formatRespError(respCode easyCon.EResp, errStr string) string {

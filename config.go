@@ -110,7 +110,6 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 			baseCfg.module = val.(string)
 		}
 	}
-	fileExist := qio.PathExists(baseCfg.filePath)
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
 		panic(err)
@@ -126,11 +125,6 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 		panic(err)
 	}
 	loadConfigs[baseCfg.module] = config
-
-	// 首次创建配置文件，立即保存
-	if fileExist == false {
-		saveConfigFile(baseCfg)
-	}
 
 	return config.getBase()
 }

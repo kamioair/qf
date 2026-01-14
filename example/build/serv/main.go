@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/kamioair/qf"
-	"moduleA"
+	"github.com/kamioair/qf/example"
 	"os"
 )
 
@@ -15,7 +15,7 @@ func main() {
 	}
 
 	// 创建配置和服务
-	serv := moduleA.NewService(setting)
+	serv := example.NewService(setting)
 
 	// 启动模块
 	module := qf.NewModule(serv)

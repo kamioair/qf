@@ -1,4 +1,4 @@
-package moduleA
+package example
 
 type TestInfo struct {
 	Name string
