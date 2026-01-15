@@ -9,12 +9,9 @@ import (
 )
 
 type Service struct {
-	moduleName    string
-	moduleDesc    string
-	moduleVersion string
-	adapter       easyCon.IAdapter
-	cfg           IConfig
-	reg           *Reg
+	adapter easyCon.IAdapter
+	cfg     IConfig
+	reg     *Reg
 }
 
 // GetRegEvents 获取注册绑定事件
@@ -22,14 +19,19 @@ func (bll *Service) GetRegEvents() *Reg {
 	return bll.reg
 }
 
+// Name 返回模块名称
+func (bll *Service) Name() string {
+	return bll.cfg.getBase().module
+}
+
 // Load 初始化
-func (bll *Service) Load(name, desc, version string, config IConfig) {
+func (bll *Service) Load(moduleName, moduleDesc, moduleVersion string, customSectionName string, config IConfig) {
 	bll.cfg = config
 	if bll.cfg == nil {
 		bll.cfg = &emptyConfig{}
 	}
 	// 设置模块信息
-	bll.cfg.setBase(name, desc, version)
+	bll.cfg.setBase(moduleName, moduleDesc, moduleVersion, customSectionName)
 	// 加载配置
 	loadConfig(bll.cfg)
 }

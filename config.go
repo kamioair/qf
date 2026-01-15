@@ -14,19 +14,21 @@ type Config struct {
 	filePath    string  // 配置文件路径
 	exit        string  // 检查进程退出
 	crypto      ICrypto // 加解密接口
-	SectionName string  // 配置节名称，为空则用模块名称
+	sectionName string  // 配置节名称，为空则用模块名称
 	Broker      struct {
-		Addr             string // 地址
-		UId              string // 用户名
-		Pwd              string // 密码
-		TimeOut          int    // 连接超时
-		Retry            int    // 重试次数
-		LogMode          string // 日志模式
-		Prefix           string // 前缀
-		LinkTimeOut      int    // 连接等待时间
-		IsRandomClientID bool   // 是否随机clientID
-		IsSyncMode       bool   // 是否同步模式
-	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:请求超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀，用于同一个模块不同实例\n LinkTimeOut:连接等待超时(毫秒) 0表示无限等待直到连上\n IsRandomClientID:是否随机clientID\n IsSyncMode:是否请求同步模式，启用后所有请求无法并行，只能一个一个执行"` // 服务连接配置
+		Addr              string // 地址
+		UId               string // 用户名
+		Pwd               string // 密码
+		TimeOut           int    // 连接超时（毫秒）
+		Retry             int    // 重试次数
+		LogMode           string // 日志模式
+		Prefix            string // 前缀
+		ChannelBufferSize int    // 各种消息通道的缓冲区大小
+		ConnectRetryDelay int    // 连接重试之间的延迟（毫秒）
+		LinkTimeOut       int    // 连接等待时间
+		IsRandomClientID  bool   // 是否随机clientID
+		IsSyncMode        bool   // 是否同步模式
+	} `comment:"MqBroker\n Addr:访问地址\n UId,Pwd:登录账号密码\n TimeOut:请求超时(毫秒)\n Retry:重试次数\n LogMode:日志模式 NONE/CONSOLE\n Prefix:前缀，用于同一个模块不同实例\n ChannelBufferSize: 各种消息通道的缓冲区大小\n ConnectRetryDelay: 连接重试之间的延迟(毫秒)\n LinkTimeOut:连接等待超时(毫秒) 0表示无限等待直到连上\n IsRandomClientID:是否随机clientID\n IsSyncMode:是否请求同步模式，启用后所有请求无法并行，只能一个一个执行"` // 服务连接配置
 }
 
 type emptyConfig struct {
@@ -53,10 +55,11 @@ func (c *Config) getBase() *Config {
 }
 
 // setBase 设置基础配置
-func (c *Config) setBase(name, desc, version string) {
-	c.module = name
-	c.desc = desc
-	c.version = version
+func (c *Config) setBase(moduleName, moduleDesc, moduleVersion string, sectionName string) {
+	c.module = moduleName
+	c.desc = moduleDesc
+	c.version = moduleVersion
+	c.sectionName = sectionName
 }
 
 // loadConfig 加载配置文件
@@ -75,26 +78,30 @@ func loadConfig(config IConfig) *Config {
 	baseCfg := config.getBase()
 	baseCfg.filePath = "./config.yaml"
 	baseCfg.Broker = struct {
-		Addr             string // 地址
-		UId              string // 用户名
-		Pwd              string // 密码
-		TimeOut          int    // 连接超时
-		Retry            int    // 重试次数
-		LogMode          string // 日志模式
-		Prefix           string // 前缀
-		LinkTimeOut      int    // 连接等待时间
-		IsRandomClientID bool   // 是否随机clientID
-		IsSyncMode       bool
+		Addr              string // 地址
+		UId               string // 用户名
+		Pwd               string // 密码
+		TimeOut           int    // 连接超时
+		Retry             int    // 重试次数
+		LogMode           string // 日志模式
+		Prefix            string // 前缀
+		ChannelBufferSize int    // 各种消息通道的缓冲区大小
+		ConnectRetryDelay int    // 连接重试之间的延迟（毫秒）
+		LinkTimeOut       int    // 连接等待时间
+		IsRandomClientID  bool   // 是否随机clientID
+		IsSyncMode        bool
 	}{
-		Addr:             "ws://127.0.0.1:5002/ws",
-		UId:              "",
-		Pwd:              "",
-		TimeOut:          3000,
-		Retry:            3,
-		LogMode:          "NONE",
-		LinkTimeOut:      1000,
-		IsRandomClientID: false,
-		IsSyncMode:       false,
+		Addr:              "ws://127.0.0.1:5002/ws",
+		UId:               "",
+		Pwd:               "",
+		TimeOut:           3000,
+		Retry:             3,
+		ChannelBufferSize: 100,
+		ConnectRetryDelay: 1000,
+		LogMode:           "NONE",
+		LinkTimeOut:       1000,
+		IsRandomClientID:  false,
+		IsSyncMode:        false,
 	}
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
@@ -102,7 +109,7 @@ func loadConfig(config IConfig) *Config {
 	}
 
 	// 加载模块自定义配置
-	section := baseCfg.SectionName
+	section := baseCfg.sectionName
 	if section == "" {
 		section = baseCfg.module
 	}
@@ -126,7 +133,7 @@ func saveConfigFile(config IConfig) {
 	saveContent.Add("Base", "模块基础配置", baseCfg)
 
 	// 模块自定义配置
-	section := baseCfg.SectionName
+	section := baseCfg.sectionName
 	if section == "" {
 		section = baseCfg.module
 	}

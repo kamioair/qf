@@ -8,32 +8,30 @@ import (
 )
 
 func TestName(t *testing.T) {
-	// 需要先启动Broker再测试
+	// 创建本项目服务
+	exampleServ := example.NewService()
 
-	// 创建模块
-	module := qf.NewModule(example.NewService())
-
-	// 创建测试器
-	test := qf.NewTest(module)
+	// 启动测试用例
+	testServ := qf.RunTest(qf.ERunTestModeCgoBroker, exampleServ)
 
 	// 测试业务功能
-	respA, err := test.Invoke(module.Name(), "MethodA", "hello methodA")
+	respA, err := testServ.SendRequest(exampleServ.Name(), "MethodA", "hello methodA")
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(respA.Raw())
+	fmt.Println("===> SendRequest MethodA Resp", respA.Raw())
 
-	respB, err := test.Invoke(module.Name(), "MethodB", respA.Raw())
+	respB, err := testServ.SendRequest(exampleServ.Name(), "MethodB", respA.Raw())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(respB.Raw())
+	fmt.Println("===> SendRequest MethodB Resp", respB.Raw())
 
-	respC, err := test.Invoke(module.Name(), "MethodC", respB.Raw())
+	respC, err := testServ.SendRequest(exampleServ.Name(), "MethodC", respB.Raw())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(respC.Raw())
+	fmt.Println("===> SendRequest MethodC Resp", respC.Raw())
 
 	// 不退出
 	select {}

@@ -7,8 +7,8 @@ import (
 
 const (
 	Version = "V1.0.251225B01"
-	Name    = "ExampleName"
-	Desc    = "模板模块A"
+	Name    = "ExampleModule"
+	Desc    = "模板模块"
 )
 
 // Service 模块服务入口
@@ -36,8 +36,9 @@ func NewService() *Service {
 			// ...
 		},
 	}
-	// 加载配置
-	serv.Load(Name, Desc, Version, serv.cfg)
+	// 加载配置，默认配置节点名称为模块名
+	// 如有需求可自定义customSectionName
+	serv.Load(Name, Desc, Version, "", serv.cfg)
 	return serv
 }
 

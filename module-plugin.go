@@ -51,6 +51,18 @@ func NewPlugin(
 		onReadCallbackPtr: onReadCallbackPtr,
 	}
 
+	// 创建onRead适配器并设置函数指针
+	setOnReadAdapter(p.onRead, p.onReadCallbackPtr)
+
+	return p
+}
+
+// 内部测试用
+func newPluginTest(service IService, onWrite OnWriteDelegate) *plugin {
+	p := &plugin{
+		baseModule: newBaseModule(service),
+		onWrite:    onWrite,
+	}
 	return p
 }
 
@@ -83,8 +95,8 @@ func (p *plugin) Run() {
 		ReTry:             cfg.Broker.Retry,
 		LogMode:           easyCon.ELogMode(cfg.Broker.LogMode),
 		PreFix:            cfg.Broker.Prefix,
-		ChannelBufferSize: 100,
-		ConnectRetryDelay: time.Second,
+		ChannelBufferSize: cfg.Broker.ChannelBufferSize,
+		ConnectRetryDelay: time.Duration(cfg.Broker.ConnectRetryDelay) * time.Millisecond,
 		IsWaitLink:        cfg.Broker.LinkTimeOut == 0,
 		IsSync:            false,
 	}
@@ -92,6 +104,7 @@ func (p *plugin) Run() {
 	// 构建回调
 	callback := p.buildAdapterCallBack(p.onState, p.onReq, p.onExiting, p.getVersion)
 
+	// 启动客户端
 	p.adapter, p.onRead = easyCon.NewCgoAdapter(setting, callback, p.onWrite)
 
 	// 调用业务的初始化
@@ -99,9 +112,6 @@ func (p *plugin) Run() {
 
 	// 保存配置文件
 	p.saveConfig()
-
-	// 创建onRead适配器并设置函数指针
-	setOnReadAdapter(p.onRead, p.onReadCallbackPtr)
 
 	// 启动成功
 	fmt.Printf("\nStart OK\n\n")

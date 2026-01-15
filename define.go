@@ -29,9 +29,10 @@ type IModule interface {
 
 // IService 模块功能接口
 type IService interface {
-	Reg(reg *Reg)                                    // 注册事件
-	GetRegEvents() *Reg                              // 返回注册事件
-	Load(name, desc, version string, config IConfig) // 加载模块
+	Name() string                                                                          // 返回模块名称
+	Reg(reg *Reg)                                                                          // 注册事件
+	GetRegEvents() *Reg                                                                    // 返回注册事件
+	Load(moduleName, moduleDesc, moduleVersion string, sectionName string, config IConfig) // 加载模块
 
 	// 内部使用的方法
 	config() IConfig
@@ -40,7 +41,7 @@ type IService interface {
 
 // IConfig 配置接口
 type IConfig interface {
-	setBase(name, desc, version string)
+	setBase(moduleName, moduleDesc, moduleVersion string, sectionName string)
 	getBase() *Config
 }
 

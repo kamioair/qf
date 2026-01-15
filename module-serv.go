@@ -87,6 +87,8 @@ func (m *module) start() {
 	setting.ReTry = cfg.Broker.Retry
 	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
 	setting.PreFix = cfg.Broker.Prefix
+	setting.ChannelBufferSize = cfg.Broker.ChannelBufferSize
+	setting.ConnectRetryDelay = time.Duration(cfg.Broker.ConnectRetryDelay) * time.Millisecond
 	setting.IsWaitLink = cfg.Broker.LinkTimeOut == 0
 	setting.IsSync = cfg.Broker.IsSyncMode
 
