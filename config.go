@@ -105,7 +105,7 @@ func loadConfig(config IConfig) *Config {
 	}
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("load config file [%s] failed: %v", qio.GetFullPath(baseCfg.filePath), err))
 	}
 
 	// 加载模块自定义配置
@@ -115,7 +115,7 @@ func loadConfig(config IConfig) *Config {
 	}
 	err = qconfig.LoadConfig(baseCfg.filePath, section, config)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("load config file [%s] failed: %v", qio.GetFullPath(baseCfg.filePath), err))
 	}
 	loadConfigs[baseCfg.module] = config
 
