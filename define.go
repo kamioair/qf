@@ -23,17 +23,19 @@ type IModule interface {
 	RunAsync()
 	// Stop 停止模块
 	Stop()
+	// Name 获取模块名称
+	Name() string
 }
 
 // IService 模块功能接口
 type IService interface {
-	Reg(reg *Reg)                                                                  // 注册事件
-	GetRegEvents() *Reg                                                            // 返回注册事件
-	Load(name, desc, version string, config IConfig, customSetting map[string]any) // 加载模块
+	Reg(reg *Reg)                                    // 注册事件
+	GetRegEvents() *Reg                              // 返回注册事件
+	Load(name, desc, version string, config IConfig) // 加载模块
 
 	// 内部使用的方法
 	config() IConfig
-	setEnv(reg *Reg, adapter easyCon.IAdapter, callback CallbackDelegate)
+	setEnv(reg *Reg, adapter easyCon.IAdapter)
 }
 
 // IConfig 配置接口
@@ -75,77 +77,11 @@ type OnReqFunc func(ctx IContext) (any, error)
 // OnNoticeFunc 通知方法定义
 type OnNoticeFunc func(ctx IContext)
 
-// CallbackDelegate 回调
-type CallbackDelegate func(inParam string)
-
 // OnWriteDelegate 插件用委托
 type OnWriteDelegate func([]byte) error
 type OnReadDelegate func([]byte)
 
-type CallbackReq struct {
-	PType   easyCon.EPType
-	ReqTime string
-	Route   string
-	Content string
-}
-
-//
-//// Invoke 执行方法
-//func Invoke[Req, Resp any](pack easyCon.PackReq, method func(req Req) (Resp, easyCon.EResp, error)) (code easyCon.EResp, resp any) {
-//	defer errRecover(func(err string) {
-//		code = easyCon.ERespError
-//		resp = errors.New(err)
-//	}, pack.To, pack.Route, pack.Content)
-//
-//	// 创建上下文
-//	ctx, err := newContent(pack.Content, &pack, nil, nil)
-//	if err != nil {
-//		return easyCon.ERespBadReq, err
-//	}
-//
-//	// 获取入参
-//	var req Req
-//	err = ctx.Bind(&req)
-//	if err != nil {
-//		return easyCon.ERespBadReq, err
-//	}
-//
-//	// 执行方法并返回
-//	resp, code, err = method(req)
-//	if code != easyCon.ERespSuccess {
-//		return code, err
-//	}
-//	return code, resp
-//}
-//
-//// InvokeNoResp 执行方法（无返回）
-//func InvokeNoResp[Req any](pack easyCon.PackReq, method func(req Req) (easyCon.EResp, error)) (code easyCon.EResp, resp any) {
-//	defer errRecover(func(err string) {
-//		code = easyCon.ERespError
-//		resp = errors.New(err)
-//	}, pack.To, pack.Route, pack.Content)
-//
-//	// 创建上下文
-//	ctx, err := newContent(pack.Content, &pack, nil, nil)
-//	if err != nil {
-//		return easyCon.ERespBadReq, err
-//	}
-//
-//	// 获取入参
-//	var req Req
-//	err = ctx.Bind(&req)
-//	if err != nil {
-//		return easyCon.ERespBadReq, err
-//	}
-//
-//	// 执行方法并返回
-//	code, err = method(req)
-//	if code != easyCon.ERespSuccess {
-//		return code, err
-//	}
-//	return code, nil
-//}
-
+// Invoke 调用业务方法
 func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp any) {
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
@@ -172,6 +108,9 @@ func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp any
 
 	// 获取函数参数个数
 	numIn := t.NumIn()
+	if numIn > 1 {
+		return easyCon.ERespError, errors.New(fmt.Sprintf("method %T too many arguments, expect 0 or 1", method))
+	}
 
 	var args []reflect.Value
 

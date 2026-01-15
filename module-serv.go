@@ -11,46 +11,40 @@ import (
 
 // NewModule 创建Cmd模块
 func NewModule(service IService) IModule {
-	return newModule(service, nil)
-}
-
-// NewDllModule 创建Dll模块
-func NewDllModule(service IService, callback CallbackDelegate) IModule {
-	return newModule(service, callback)
+	return &module{
+		baseModule:      newBaseModule(service),
+		waitConnectChan: make(chan bool),
+		waitLock:        sync.Mutex{},
+	}
 }
 
 type module struct {
 	*baseModule     // 嵌入基础模块
 	waitConnectChan chan bool
 	waitLock        sync.Mutex
-	callback        CallbackDelegate
+	isAsyncRun      bool
 }
 
-func newModule(service IService, callback CallbackDelegate) IModule {
-	return &module{
-		baseModule:      newBaseModule(service),
-		callback:        callback,
-		waitConnectChan: make(chan bool),
-		waitLock:        sync.Mutex{},
-	}
+// Name 获取模块名称
+func (m *module) Name() string {
+	return m.service.config().getBase().module
 }
 
 // Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
 func (m *module) Run() {
-	// cmd模式
+	m.isAsyncRun = false
 	qlauncher.Run(m.start, m.stop, false)
 }
 
 // RunAsync 异步运行模块，执行后不等待
 func (m *module) RunAsync() {
-	// dll模式
+	m.isAsyncRun = true
 	m.start()
 }
 
 // Stop 停止模块
 func (m *module) Stop() {
-	if m.callback != nil {
-		// 异步允许，则直接退出
+	if m.isAsyncRun {
 		m.stop()
 	} else {
 		qlauncher.Exit()
@@ -101,7 +95,6 @@ func (m *module) start() {
 
 	// 创建模块链接
 	m.adapter = easyCon.NewMqttAdapter(setting, callback)
-	m.setEnv(m.callback)
 
 	// 等待连接成功
 	time.Sleep(time.Millisecond * 1)
@@ -135,11 +128,10 @@ func (m *module) stop() {
 }
 
 func (m *module) onExiting() {
-	qlauncher.Exit()
+	m.Stop()
 }
 
 func (m *module) onState(status easyCon.EStatus) {
-
 	if status == easyCon.EStatusLinked {
 		m.waitLock.Lock()
 		defer m.waitLock.Unlock()

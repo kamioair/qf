@@ -39,19 +39,9 @@ func (bm *baseModule) getReg() *Reg {
 	return bm.reg
 }
 
-// setAdapter 设置适配器
-func (bm *baseModule) setAdapter(adapter easyCon.IAdapter) {
-	bm.adapter = adapter
-}
-
 // getAdapter 获取适配器
 func (bm *baseModule) getAdapter() easyCon.IAdapter {
 	return bm.adapter
-}
-
-// setEnv 设置模块环境（在适配器创建后调用）
-func (bm *baseModule) setEnv(callback CallbackDelegate) {
-	bm.service.setEnv(bm.reg, bm.adapter, callback)
 }
 
 // printModuleInfo 打印模块启动信息
@@ -105,6 +95,7 @@ func (bm *baseModule) callOnState(status easyCon.EStatus) {
 
 // callOnInit 调用业务初始化回调
 func (bm *baseModule) callOnInit() {
+	bm.service.setEnv(bm.reg, bm.adapter)
 	if bm.reg.OnInit != nil {
 		bm.reg.OnInit()
 	}

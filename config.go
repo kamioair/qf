@@ -8,14 +8,14 @@ import (
 )
 
 type Config struct {
-	module        string  // 模块服务名称
-	desc          string  // 模块服务描述
-	version       string  // 模块服务版本
-	filePath      string  // 配置文件路径
-	exit          string  // 检查进程退出
-	crypto        ICrypto // 加解密接口
-	customSection string  // 自定义配置节名称
-	Broker        struct {
+	module      string  // 模块服务名称
+	desc        string  // 模块服务描述
+	version     string  // 模块服务版本
+	filePath    string  // 配置文件路径
+	exit        string  // 检查进程退出
+	crypto      ICrypto // 加解密接口
+	SectionName string  // 配置节名称，为空则用模块名称
+	Broker      struct {
 		Addr             string // 地址
 		UId              string // 用户名
 		Pwd              string // 密码
@@ -42,12 +42,9 @@ func (c *Config) GetModuleInfo() (Name string, Desc string, Version string) {
 	return c.module, c.desc, c.version
 }
 
+// RegCrypto 注册加解密连接串
 func (c *Config) RegCrypto(crypto ICrypto) {
 	c.crypto = crypto
-}
-
-func (c *Config) SetCustomSection(section string) {
-	c.customSection = section
 }
 
 // getBase 获取基础配置（供内部module.go调用）
@@ -63,7 +60,7 @@ func (c *Config) setBase(name, desc, version string) {
 }
 
 // loadConfig 加载配置文件
-func loadConfig(config IConfig, customSetting map[string]any) *Config {
+func loadConfig(config IConfig) *Config {
 	// 修改系统路径为当前目录
 	err := os.Chdir(qio.GetCurrentDirectory())
 	if err != nil {
@@ -99,24 +96,13 @@ func loadConfig(config IConfig, customSetting map[string]any) *Config {
 		IsRandomClientID: false,
 		IsSyncMode:       false,
 	}
-	// 如果有外部传入参数，则更新配置
-	if customSetting != nil {
-		// 自定义配置文件路径
-		if val, ok := customSetting["ConfigPath"]; ok {
-			baseCfg.filePath = val.(string)
-		}
-		// 自定义模块名称
-		if val, ok := customSetting["ModuleName"]; ok && val != "" {
-			baseCfg.module = val.(string)
-		}
-	}
 	err = qconfig.LoadConfig(baseCfg.filePath, "Base", baseCfg)
 	if err != nil {
 		panic(err)
 	}
 
 	// 加载模块自定义配置
-	section := baseCfg.customSection
+	section := baseCfg.SectionName
 	if section == "" {
 		section = baseCfg.module
 	}
@@ -140,7 +126,7 @@ func saveConfigFile(config IConfig) {
 	saveContent.Add("Base", "模块基础配置", baseCfg)
 
 	// 模块自定义配置
-	section := baseCfg.customSection
+	section := baseCfg.SectionName
 	if section == "" {
 		section = baseCfg.module
 	}

@@ -20,7 +20,7 @@ func NewTest(modules ...IModule) *Test {
 		modules:     modules,
 		testService: &testService{},
 	}
-	t.testService.Load("TestModule", "测试模块", "1.0.0", nil, nil)
+	t.testService.Load("TestModule", "测试模块", "1.0.0", nil)
 
 	// 创建用例模块
 	t.testModule = NewModule(t.testService)

@@ -54,6 +54,12 @@ func NewPlugin(
 	return p
 }
 
+// Name 获取模块名称
+func (p *plugin) Name() string {
+	return p.service.config().getBase().module
+}
+
+// Run 同步运行模块，执行后会等待直到程序退出，单进程仅单模块时使用（exe模式）
 func (p *plugin) Run() {
 	cfg := p.service.config().getBase()
 
@@ -89,7 +95,6 @@ func (p *plugin) Run() {
 	p.adapter, p.onRead = easyCon.NewCgoAdapter(setting, callback, p.onWrite)
 
 	// 调用业务的初始化
-	p.setEnv(nil)
 	p.callOnInit()
 
 	// 保存配置文件
@@ -102,6 +107,7 @@ func (p *plugin) Run() {
 	fmt.Printf("\nStart OK\n\n")
 }
 
+// RunAsync 异步运行模块，执行后不等待
 func (p *plugin) RunAsync() {
 	p.Run()
 }

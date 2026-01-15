@@ -7,7 +7,7 @@ import (
 
 const (
 	Version = "V1.0.251225B01"
-	Name    = "ModuleA"
+	Name    = "ExampleName"
 	Desc    = "模板模块A"
 )
 
@@ -29,7 +29,7 @@ type Config struct {
 }
 
 // NewService 创建功能实现入口
-func NewService(customSetting map[string]any) *Service {
+func NewService() *Service {
 	serv := &Service{
 		cfg: &Config{
 			// 自定义配置初始值
@@ -37,7 +37,7 @@ func NewService(customSetting map[string]any) *Service {
 		},
 	}
 	// 加载配置
-	serv.Load(Name, Desc, Version, serv.cfg, customSetting)
+	serv.Load(Name, Desc, Version, serv.cfg)
 	return serv
 }
 
