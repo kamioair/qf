@@ -154,6 +154,6 @@ func (m *module) onState(status easyCon.EStatus) {
 	m.callOnState(status)
 }
 
-func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
+func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp []byte) {
 	return m.handleReq(pack, m.Stop)
 }

@@ -135,12 +135,12 @@ func (bm *baseModule) decryptBrokerConfig() (addr, uid, pwd string) {
 }
 
 // handleReq 通用请求处理
-func (bm *baseModule) handleReq(pack easyCon.PackReq, onStop func()) (code easyCon.EResp, resp any) {
+func (bm *baseModule) handleReq(pack easyCon.PackReq, onStop func()) (code easyCon.EResp, resp []byte) {
 	cfg := bm.service.config().getBase()
 
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
-		resp = errors.New(err)
+		resp = []byte(err)
 	}, cfg.module, pack.Route, pack.Content)
 
 	switch pack.Route {
@@ -155,7 +155,8 @@ func (bm *baseModule) handleReq(pack easyCon.PackReq, onStop func()) (code easyC
 		ver["Desc"] = cfg.desc
 		ver["ModuleVersion"] = cfg.version
 		ver["FrameVersion"] = Version
-		return easyCon.ERespSuccess, ver
+		j, _ := json.Marshal(ver)
+		return easyCon.ERespSuccess, j
 	}
 
 	if bm.reg.OnReq != nil {
@@ -163,17 +164,12 @@ func (bm *baseModule) handleReq(pack easyCon.PackReq, onStop func()) (code easyC
 		if code != easyCon.ERespSuccess {
 			// 记录日志
 			str, _ := json.Marshal(pack.Content)
-			errStr := ""
-			if e, ok := resp.(error); ok && e != nil {
-				errStr = e.Error()
-			} else {
-				errStr = fmt.Sprintf("%v", resp)
-			}
+			errStr := string(resp)
 			writeLog(cfg.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
 		}
 		return code, resp
 	}
-	return easyCon.ERespRouteNotFind, "Route Not Matched"
+	return easyCon.ERespRouteNotFind, []byte("Route Not Matched")
 }
 
 // getVersion 获取版本信息

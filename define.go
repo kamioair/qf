@@ -2,7 +2,6 @@ package qf
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/kamioair/utils/qconvert"
 	"github.com/kamioair/utils/qio"
@@ -65,7 +64,7 @@ type Void struct {
 type Reg struct {
 	OnInit          func()
 	OnStop          func()
-	OnReq           func(pack easyCon.PackReq) (easyCon.EResp, any)
+	OnReq           func(pack easyCon.PackReq) (easyCon.EResp, []byte)
 	OnNotice        func(notice easyCon.PackNotice)
 	OnRetainNotice  func(notice easyCon.PackNotice)
 	OnStatusChanged func(status easyCon.EStatus)
@@ -83,47 +82,44 @@ type OnWriteDelegate func([]byte) error
 type OnReadDelegate func([]byte)
 
 // Invoke 调用业务方法
-func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp any) {
+func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp []byte) {
 	defer errRecover(func(err string) {
 		code = easyCon.ERespError
-		resp = errors.New(err)
+		resp = []byte(err)
 	}, pack.To, pack.Route, pack.Content)
 
 	// 验证
 	v := reflect.ValueOf(method)
 	if !v.IsValid() {
-		return easyCon.ERespError, errors.New("invalid method")
+		return easyCon.ERespError, []byte("invalid method")
 	}
 
 	t := v.Type()
 	// 检查是否是函数
 	if t.Kind() != reflect.Func {
-		return easyCon.ERespError, errors.New(fmt.Sprintf("not a function: %T\n", method))
-	}
-
-	// 创建上下文
-	ctx, err := newContent(pack.Content, &pack, nil, nil)
-	if err != nil {
-		return easyCon.ERespBadReq, err
+		return easyCon.ERespError, []byte(fmt.Sprintf("not a function: %T\n", method))
 	}
 
 	// 获取函数参数个数
 	numIn := t.NumIn()
 	if numIn > 1 {
-		return easyCon.ERespError, errors.New(fmt.Sprintf("method %T too many arguments, expect 0 or 1", method))
+		return easyCon.ERespError, []byte(fmt.Sprintf("method %T too many arguments, expect 0 or 1", method))
 	}
 
 	var args []reflect.Value
+	var err error
 
 	if numIn > 0 {
 		paramType := t.In(0)
 		if paramType.Kind() == reflect.String {
-			args = []reflect.Value{reflect.ValueOf(ctx.Raw())}
+			args = []reflect.Value{reflect.ValueOf(string(pack.Content))}
+		} else if paramType.Kind() == reflect.Slice {
+			args = []reflect.Value{reflect.ValueOf(pack.Content)}
 		} else {
 			obj := reflect.New(paramType).Interface()
-			err = ctx.Bind(&obj)
+			err = json.Unmarshal(pack.Content, &obj)
 			if err != nil {
-				return easyCon.ERespBadReq, err
+				return easyCon.ERespBadReq, []byte(err.Error())
 			}
 			args = []reflect.Value{reflect.ValueOf(obj).Elem()}
 		}
@@ -135,25 +131,47 @@ func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp any
 	// 处理返回
 	if len(results) == 2 {
 		code = results[0].Interface().(easyCon.EResp)
-		if results[1].Interface() != nil {
-			err = results[1].Interface().(error)
-		}
 		if code != easyCon.ERespSuccess {
-			return code, err
+			if results[1].Interface() != nil {
+				err = results[1].Interface().(error)
+			}
+			if err == nil {
+				return code, []byte("")
+			}
+			return code, []byte(err.Error())
 		}
 		return code, nil
 	} else if len(results) == 3 {
-		resp = results[0].Interface()
 		code = results[1].Interface().(easyCon.EResp)
-		if results[2].Interface() != nil {
-			err = results[2].Interface().(error)
-		}
 		if code != easyCon.ERespSuccess {
-			return code, err
+			if results[2].Interface() != nil {
+				err = results[2].Interface().(error)
+			}
+			if err == nil {
+				return code, []byte("")
+			}
+			return code, []byte(err.Error())
+		}
+		obj := results[0].Interface()
+		if obj == nil {
+			resp = []byte("")
+		} else if s, ok := obj.(string); ok {
+			// 如果是字符串，直接转换为 []byte
+			resp = []byte(s)
+		} else if b, ok := obj.([]byte); ok {
+			// 如果已经是 []byte，直接使用
+			resp = b
+		} else {
+			// 其他类型（结构体等）转换为 JSON 格式的 []byte
+			var err error
+			resp, err = json.Marshal(obj)
+			if err != nil {
+				return easyCon.ERespError, []byte(fmt.Sprintf("failed to marshal response: %v", err))
+			}
 		}
 		return code, resp
 	}
-	return easyCon.ERespError, errors.New("invalid return count, need any,code,error or code,error")
+	return easyCon.ERespError, []byte("invalid return count, need any,code,error or code,error")
 }
 
 // @Description: Panic的异常收集

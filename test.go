@@ -19,7 +19,7 @@ func (serv *TestService) onInit() {
 
 }
 
-func (serv *TestService) onReq(pack easyCon.PackReq) (easyCon.EResp, any) {
+func (serv *TestService) onReq(pack easyCon.PackReq) (easyCon.EResp, []byte) {
 	return serv.ReturnNotFind()
 }
 

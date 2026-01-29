@@ -55,7 +55,7 @@ func (serv *Service) onInit() {
 }
 
 // 实现外部请求
-func (serv *Service) onReq(pack easyCon.PackReq) (easyCon.EResp, any) {
+func (serv *Service) onReq(pack easyCon.PackReq) (easyCon.EResp, []byte) {
 	switch pack.Route {
 	case "MethodA":
 		return qf.Invoke(pack, serv.bll.MethodA)

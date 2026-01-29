@@ -46,49 +46,46 @@ func (bll *Service) NoticeInvoke(pack easyCon.PackNotice, onReq OnNoticeFunc) {
 }
 
 // ReturnOk 返回成功
-func (bll *Service) ReturnOk(content any) (code easyCon.EResp, resp any) {
+func (bll *Service) ReturnOk(content []byte) (code easyCon.EResp, resp []byte) {
 	return easyCon.ERespSuccess, content
 }
 
 // ReturnErr 返回错误
-func (bll *Service) ReturnErr(content any) (code easyCon.EResp, resp any) {
-	js, _ := json.Marshal(content)
-	return easyCon.ERespError, errors.New(string(js))
+func (bll *Service) ReturnErr(content []byte) (code easyCon.EResp, resp []byte) {
+	return easyCon.ERespError, content
 }
 
 // ReturnNotFind 返回未找到
-func (bll *Service) ReturnNotFind() (code easyCon.EResp, resp any) {
+func (bll *Service) ReturnNotFind() (code easyCon.EResp, resp []byte) {
 	return easyCon.ERespRouteNotFind, nil
 }
 
 // SendRequest 发送请求
-func (bll *Service) SendRequest(module, route string, params any) (IContext, error) {
+func (bll *Service) SendRequest(module, route string, params []byte) easyCon.PackResp {
 	resp := bll.adapter.Req(module, route, params)
-	if resp.RespCode == easyCon.ERespSuccess {
-		return newContent(resp.Content, nil, &resp, nil)
+	if resp.RespCode != easyCon.ERespSuccess {
+		// 记录日志
+		str, _ := json.Marshal(params)
+		err := errors.New(formatRespError(resp.RespCode, string(resp.Content)))
+		bll.SendLogError(fmt.Sprintf("[SendRequest To %s.%s] InParams=%s", module, route, string(str)), err)
 	}
-	// 记录日志
-	str, _ := json.Marshal(params)
-	err := errors.New(formatRespError(resp.RespCode, resp.Error))
-	bll.SendLogError(fmt.Sprintf("[SendRequest To %s.%s] InParams=%s", module, route, string(str)), err)
-	return nil, err
+	return resp
 }
 
 // SendRequestWithTimeout 发送请求(可自定义超时时间的,单位毫秒)
-func (bll *Service) SendRequestWithTimeout(module, route string, params any, timeout int) (IContext, error) {
+func (bll *Service) SendRequestWithTimeout(module, route string, params []byte, timeout int) easyCon.PackResp {
 	resp := bll.adapter.ReqWithTimeout(module, route, params, timeout)
-	if resp.RespCode == easyCon.ERespSuccess {
-		return newContent(resp.Content, nil, &resp, nil)
+	if resp.RespCode != easyCon.ERespSuccess {
+		// 记录日志
+		str, _ := json.Marshal(params)
+		err := errors.New(formatRespError(resp.RespCode, string(resp.Content)))
+		bll.SendLogError(fmt.Sprintf("[SendRequestWithTimeout To %s.%s] InParams=%s", module, route, string(str)), err)
 	}
-	// 记录日志
-	str, _ := json.Marshal(params)
-	err := errors.New(formatRespError(resp.RespCode, resp.Error))
-	bll.SendLogError(fmt.Sprintf("[SendRequestWithTimeout To %s.%s] Timeout=%d InParams=%s", module, route, timeout, string(str)), err)
-	return nil, err
+	return resp
 }
 
 // SendNotice 发送通知
-func (bll *Service) SendNotice(route string, content any) {
+func (bll *Service) SendNotice(route string, content []byte) {
 	err := bll.adapter.SendNotice(route, content)
 	if err != nil {
 		str, _ := json.Marshal(content)
@@ -97,7 +94,7 @@ func (bll *Service) SendNotice(route string, content any) {
 }
 
 // SendRetainNotice 发送保持通知
-func (bll *Service) SendRetainNotice(route string, content any) {
+func (bll *Service) SendRetainNotice(route string, content []byte) {
 	err := bll.adapter.SendRetainNotice(route, content)
 	if err != nil {
 		str, _ := json.Marshal(content)

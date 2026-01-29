@@ -137,7 +137,7 @@ func (p *plugin) onState(status easyCon.EStatus) {
 	p.callOnState(status)
 }
 
-func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
+func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp []byte) {
 	return p.handleReq(pack, p.Stop)
 }
 
