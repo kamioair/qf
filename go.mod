@@ -2,11 +2,9 @@ module github.com/kamioair/qf
 
 go 1.20
 
-replace github.com/qiu-tec/easy-con.golang => ../easy-con.golang
-
 require (
 	github.com/kamioair/utils v0.1.1
-	github.com/qiu-tec/easy-con.golang v0.4.0
+	github.com/qiu-tec/easy-con.golang v0.5.0
 )
 
 require (
