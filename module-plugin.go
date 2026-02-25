@@ -102,7 +102,7 @@ func (p *plugin) Run() {
 	}
 
 	// 构建回调
-	callback := p.buildAdapterCallBack(p.onState, p.onReq, p.onExiting, p.getVersion)
+	callback := p.buildAdapterCallBack(p.onState, p.onReq, p.onNotice, p.onRetainNotice, p.onExiting, p.getVersion)
 
 	// 启动客户端
 	p.adapter, p.onRead = easyCon.NewCgoAdapter(setting, callback, p.onWrite)
@@ -139,6 +139,14 @@ func (p *plugin) onState(status easyCon.EStatus) {
 
 func (p *plugin) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp []byte) {
 	return p.handleReq(pack, p.Stop)
+}
+
+func (p *plugin) onNotice(notice easyCon.PackNotice) {
+	p.handleNotice(notice, false)
+}
+
+func (p *plugin) onRetainNotice(notice easyCon.PackNotice) {
+	p.handleNotice(notice, false)
 }
 
 // createOnWriteAdapter 创建写入适配器

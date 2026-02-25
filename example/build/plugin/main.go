@@ -18,12 +18,19 @@ func main() {
 	// 插件模式的 main 函数不需要执行任何操作
 }
 
+var module qf.IModule
+
 //export Init
 func Init(onWriteCallback C.OnWriteCallback, onReadCallbackPtr uintptr) {
 	// 创建配置和服务
 	serv := example.NewService()
 
 	// 启动插件
-	module := qf.NewPlugin(serv, uintptr(unsafe.Pointer(onWriteCallback)), onReadCallbackPtr)
+	module = qf.NewPlugin(serv, uintptr(unsafe.Pointer(onWriteCallback)), onReadCallbackPtr)
 	module.Run()
+}
+
+//export Stop
+func Stop() {
+	module.Stop()
 }

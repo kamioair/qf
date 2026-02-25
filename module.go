@@ -10,7 +10,6 @@ import (
 // baseModule 基础模块，包含所有模块类型的公共实现
 type baseModule struct {
 	service IService
-	reg     *Reg
 	adapter easyCon.IAdapter
 }
 
@@ -22,9 +21,7 @@ func newBaseModule(service IService) *baseModule {
 
 	bm := &baseModule{
 		service: service,
-		reg:     &Reg{},
 	}
-	bm.service.Reg(bm.reg)
 
 	return bm
 }
@@ -32,11 +29,6 @@ func newBaseModule(service IService) *baseModule {
 // getService 获取服务接口
 func (bm *baseModule) getService() IService {
 	return bm.service
-}
-
-// getReg 获取注册对象
-func (bm *baseModule) getReg() *Reg {
-	return bm.reg
 }
 
 // getAdapter 获取适配器
@@ -64,48 +56,52 @@ func (bm *baseModule) saveConfig() {
 func (bm *baseModule) buildAdapterCallBack(
 	onStatusChanged easyCon.StatusChangedHandler,
 	onReq easyCon.ReqHandler,
+	onNotice easyCon.NoticeHandler,
+	onRetainNotice easyCon.NoticeHandler,
 	onExiting func(),
 	onGetVersion func() []string,
 ) easyCon.AdapterCallBack {
 	callback := easyCon.AdapterCallBack{
 		OnStatusChanged: onStatusChanged,
-		OnReqRec:        onReq,
-		OnRespRec:       nil,
 		OnExiting:       onExiting,
 		OnGetVersion:    onGetVersion,
 	}
-	if bm.reg.OnNotice != nil {
-		callback.OnNoticeRec = bm.reg.OnNotice
+	ckReq, ckNotice, ckRetainNotice := bm.service.getBindCallback()
+	if ckReq {
+		callback.OnReqRec = onReq
 	}
-	if bm.reg.OnRetainNotice != nil {
-		callback.OnRetainNoticeRec = bm.reg.OnRetainNotice
+	if ckNotice {
+		callback.OnNoticeRec = onNotice
 	}
-	if bm.reg.OnLog != nil {
-		callback.OnLogRec = bm.reg.OnLog
+	if ckRetainNotice {
+		callback.OnRetainNoticeRec = onRetainNotice
 	}
+	//if bm.reg.OnLog != nil {
+	//	callback.OnLogRec = bm.reg.OnLog
+	//}
 	return callback
 }
 
 func (bm *baseModule) callOnState(status easyCon.EStatus) {
 	fmt.Printf("Link state = [%s]\n", status)
-	if bm.reg != nil && bm.reg.OnStatusChanged != nil {
-		go bm.reg.OnStatusChanged(status)
-	}
+	//if bm.reg != nil && bm.reg.OnStatusChanged != nil {
+	//	go bm.reg.OnStatusChanged(status)
+	//}
 }
 
 // callOnInit 调用业务初始化回调
 func (bm *baseModule) callOnInit() {
-	bm.service.setEnv(bm.reg, bm.adapter)
-	if bm.reg.OnInit != nil {
-		bm.reg.OnInit()
-	}
+	bm.service.setEnv(bm.adapter)
+	//if bm.reg.OnInit != nil {
+	//	bm.reg.OnInit()
+	//}
 }
 
 // callOnStop 调用业务停止回调
 func (bm *baseModule) callOnStop() {
-	if bm.reg.OnStop != nil {
-		bm.reg.OnStop()
-	}
+	//if bm.reg.OnStop != nil {
+	//	bm.reg.OnStop()
+	//}
 }
 
 // decryptBrokerConfig 解密 Broker 配置
@@ -159,17 +155,15 @@ func (bm *baseModule) handleReq(pack easyCon.PackReq, onStop func()) (code easyC
 		return easyCon.ERespSuccess, j
 	}
 
-	if bm.reg.OnReq != nil {
-		code, resp = bm.reg.OnReq(pack)
-		if code != easyCon.ERespSuccess {
-			// 记录日志
-			str, _ := json.Marshal(pack.Content)
-			errStr := string(resp)
-			writeLog(cfg.module, "Error", fmt.Sprintf("[OnReq From %s.%s] InParam=%s", pack.From, pack.Route, str), formatRespError(code, errStr))
-		}
-		return code, resp
+	r, c, e := bm.service.callRequest(pack)
+	if e != nil || c != easyCon.ERespSuccess {
+		return c, []byte(e.Error())
 	}
-	return easyCon.ERespRouteNotFind, []byte("Route Not Matched")
+	return c, r
+}
+
+func (bm *baseModule) handleNotice(notice easyCon.PackNotice, isRetain bool) {
+	bm.service.callNotice(notice, isRetain)
 }
 
 // getVersion 获取版本信息

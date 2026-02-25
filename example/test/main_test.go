@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/kamioair/qf"
 	"github.com/kamioair/qf/example"
-	easyCon "github.com/qiu-tec/easy-con.golang"
 	"testing"
 )
 
@@ -16,23 +15,17 @@ func TestName(t *testing.T) {
 	testServ := qf.RunTest(qf.ERunTestModeCgoBroker, exampleServ)
 
 	// 测试业务功能
-	respA := testServ.SendRequest(exampleServ.Name(), "MethodA", []byte("hello methodA"))
-	if respA.RespCode != easyCon.ERespSuccess {
-		t.Fatal(respA.Content)
-	}
-	fmt.Println("===> SendRequest MethodA Resp", respA.Content)
+	respA, codeA, errA := qf.SendRequest[string, *example.TestInfo](testServ, exampleServ.Name(), "MethodA", "test")
+	fmt.Println("===> SendRequest MethodA Resp", respA, codeA, errA)
 
-	respB := testServ.SendRequest(exampleServ.Name(), "MethodB", respA.Content)
-	if respB.RespCode != easyCon.ERespSuccess {
-		t.Fatal(respB.Content)
-	}
-	fmt.Println("===> SendRequest MethodB Resp", respB.Content)
+	respB, codeB, errB := qf.SendRequest[qf.Void, []string](testServ, exampleServ.Name(), "MethodB", nil)
+	fmt.Println("===> SendRequest MethodB Resp", respB, codeB, errB)
 
-	respC := testServ.SendRequest(exampleServ.Name(), "MethodC", respB.Content)
-	if respC.RespCode != easyCon.ERespSuccess {
-		t.Fatal(respC.Content)
-	}
-	fmt.Println("===> SendRequest MethodC Resp", respC.Content)
+	respC, codeC, errC := qf.SendRequest[string, qf.Void](testServ, exampleServ.Name(), "MethodC", "test")
+	fmt.Println("===> SendRequest MethodC Resp", respC, codeC, errC)
+
+	errN := qf.SendNotice[string](testServ, "ChangedNotice", "10001", false)
+	fmt.Println("===> SendNotice ChangedNotice Resp", errN)
 
 	// 不退出
 	select {}

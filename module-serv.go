@@ -67,8 +67,8 @@ func (m *module) start() {
 	m.printModuleInfo()
 
 	// 重新注册（确保初始化）
-	m.reg = &Reg{}
-	m.service.Reg(m.reg)
+	//m.reg = &Reg{}
+	//m.service.Reg(m.reg)
 
 	// 解密连接配置
 	addr, uid, pwd := m.decryptBrokerConfig()
@@ -93,7 +93,7 @@ func (m *module) start() {
 	setting.IsSync = cfg.Broker.IsSyncMode
 
 	// 构建回调
-	callback := m.buildAdapterCallBack(m.onState, m.onReq, m.onExiting, m.getVersion)
+	callback := m.buildAdapterCallBack(m.onState, m.onReq, m.onNotice, m.onRetainNotice, m.onExiting, m.getVersion)
 
 	// 创建模块链接
 	m.adapter = easyCon.NewMqttAdapter(setting, callback)
@@ -156,4 +156,12 @@ func (m *module) onState(status easyCon.EStatus) {
 
 func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp []byte) {
 	return m.handleReq(pack, m.Stop)
+}
+
+func (p *module) onNotice(notice easyCon.PackNotice) {
+	p.handleNotice(notice, false)
+}
+
+func (p *module) onRetainNotice(notice easyCon.PackNotice) {
+	p.handleNotice(notice, true)
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/kamioair/utils/qio"
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -29,13 +28,17 @@ type IModule interface {
 // IService 模块功能接口
 type IService interface {
 	Name() string                                                                          // 返回模块名称
-	Reg(reg *Reg)                                                                          // 注册事件
-	GetRegEvents() *Reg                                                                    // 返回注册事件
 	Load(moduleName, moduleDesc, moduleVersion string, sectionName string, config IConfig) // 加载模块
 
 	// 内部使用的方法
 	config() IConfig
-	setEnv(reg *Reg, adapter easyCon.IAdapter)
+	adapter() easyCon.IAdapter
+	bindRequest(route string, method requestHandler)
+	callRequest(pack easyCon.PackReq) ([]byte, easyCon.EResp, error)
+	bindNotice(route string, method requestHandler, isRetain bool)
+	callNotice(pack easyCon.PackNotice, isRetain bool)
+	setEnv(adapter easyCon.IAdapter)
+	getBindCallback() (bool, bool, bool)
 }
 
 // IConfig 配置接口
@@ -50,129 +53,17 @@ type ICrypto interface {
 	Decrypt(content string) (string, error)
 }
 
-// IContext 上下文
-type IContext interface {
-	Raw() string
-	Bind(refStruct any) error
-}
-
 // Void 空值
-type Void struct {
+type Void *string
+
+// 定义一个通用的请求处理器接口
+type requestHandler interface {
+	Handle(data []byte) ([]byte, easyCon.EResp, error)
 }
-
-// Reg 事件绑定
-type Reg struct {
-	OnInit          func()
-	OnStop          func()
-	OnReq           func(pack easyCon.PackReq) (easyCon.EResp, []byte)
-	OnNotice        func(notice easyCon.PackNotice)
-	OnRetainNotice  func(notice easyCon.PackNotice)
-	OnStatusChanged func(status easyCon.EStatus)
-	OnLog           func(log easyCon.PackLog)
-}
-
-// OnReqFunc 请求方法定义
-type OnReqFunc func(ctx IContext) (any, error)
-
-// OnNoticeFunc 通知方法定义
-type OnNoticeFunc func(ctx IContext)
 
 // OnWriteDelegate 插件用委托
 type OnWriteDelegate func([]byte) error
 type OnReadDelegate func([]byte)
-
-// Invoke 调用业务方法
-func Invoke[T any](pack easyCon.PackReq, method T) (code easyCon.EResp, resp []byte) {
-	defer errRecover(func(err string) {
-		code = easyCon.ERespError
-		resp = []byte(err)
-	}, pack.To, pack.Route, pack.Content)
-
-	// 验证
-	v := reflect.ValueOf(method)
-	if !v.IsValid() {
-		return easyCon.ERespError, []byte("invalid method")
-	}
-
-	t := v.Type()
-	// 检查是否是函数
-	if t.Kind() != reflect.Func {
-		return easyCon.ERespError, []byte(fmt.Sprintf("not a function: %T\n", method))
-	}
-
-	// 获取函数参数个数
-	numIn := t.NumIn()
-	if numIn > 1 {
-		return easyCon.ERespError, []byte(fmt.Sprintf("method %T too many arguments, expect 0 or 1", method))
-	}
-
-	var args []reflect.Value
-	var err error
-
-	if numIn > 0 {
-		paramType := t.In(0)
-		if paramType.Kind() == reflect.String {
-			args = []reflect.Value{reflect.ValueOf(string(pack.Content))}
-		} else if paramType.Kind() == reflect.Slice {
-			args = []reflect.Value{reflect.ValueOf(pack.Content)}
-		} else {
-			obj := reflect.New(paramType).Interface()
-			err = json.Unmarshal(pack.Content, &obj)
-			if err != nil {
-				return easyCon.ERespBadReq, []byte(err.Error())
-			}
-			args = []reflect.Value{reflect.ValueOf(obj).Elem()}
-		}
-	}
-
-	// 调用方法
-	results := v.Call(args)
-
-	// 处理返回
-	if len(results) == 2 {
-		code = results[0].Interface().(easyCon.EResp)
-		if code != easyCon.ERespSuccess {
-			if results[1].Interface() != nil {
-				err = results[1].Interface().(error)
-			}
-			if err == nil {
-				return code, []byte("")
-			}
-			return code, []byte(err.Error())
-		}
-		return code, nil
-	} else if len(results) == 3 {
-		code = results[1].Interface().(easyCon.EResp)
-		if code != easyCon.ERespSuccess {
-			if results[2].Interface() != nil {
-				err = results[2].Interface().(error)
-			}
-			if err == nil {
-				return code, []byte("")
-			}
-			return code, []byte(err.Error())
-		}
-		obj := results[0].Interface()
-		if obj == nil {
-			resp = []byte("")
-		} else if s, ok := obj.(string); ok {
-			// 如果是字符串，直接转换为 []byte
-			resp = []byte(s)
-		} else if b, ok := obj.([]byte); ok {
-			// 如果已经是 []byte，直接使用
-			resp = b
-		} else {
-			// 其他类型（结构体等）转换为 JSON 格式的 []byte
-			var err error
-			resp, err = json.Marshal(obj)
-			if err != nil {
-				return easyCon.ERespError, []byte(fmt.Sprintf("failed to marshal response: %v", err))
-			}
-		}
-		return code, resp
-	}
-	return easyCon.ERespError, []byte("invalid return count, need any,code,error or code,error")
-}
 
 // @Description: Panic的异常收集
 func errRecover(after func(err string), moduleName string, route string, inParam any) {
