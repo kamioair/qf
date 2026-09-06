@@ -104,7 +104,7 @@ func setByArgs(config *Config) {
 		args := map[string]string{}
 		err := json.Unmarshal([]byte(os.Args[1]), &args)
 		if err != nil {
-			panic(err)
+			return
 		}
 		// 自定义配置文件路径
 		if val, ok := args["ConfigPath"]; ok {
