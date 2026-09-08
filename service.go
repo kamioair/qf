@@ -52,13 +52,13 @@ type Service struct {
 }
 
 func (b *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, any) {
-	ctx, err := NewContent(pack.Content, &pack, nil)
-	if err != nil {
-		return easyCon.ERespBadReq, err
+	ctx, err1 := NewContent(pack.Content, &pack, nil)
+	if err1 != nil {
+		return easyCon.ERespBadReq, err1.Error()
 	}
-	res, err := onReq(ctx)
-	if err != nil {
-		return easyCon.ERespError, err
+	res, err2 := onReq(ctx)
+	if err2 != nil {
+		return easyCon.ERespError, err2.Error()
 	}
 	return easyCon.ERespSuccess, res
 }
@@ -104,7 +104,7 @@ func (bll *Service) SendRequest(module, route string, params any) (any, error) {
 	if resp.RespCode == easyCon.ERespSuccess {
 		return resp.Content, nil
 	}
-	err := errors.New(fmt.Sprintf("%s %s%s", resp.RespCode, resp.Content, resp.Error))
+	err := errors.New(fmt.Sprintf("RespCode=%v, Msg=%s", resp.RespCode, resp.Error))
 	// 记录日志
 	str, _ := json.Marshal(params)
 	bll.SendLogError(fmt.Sprintf("SendRequest To %s.%s Error InParams=%s", module, route, string(str)), err)
@@ -145,7 +145,7 @@ func (bll *Service) SendLogWarn(content string) {
 // SendLogError 发送Error日志
 func (bll *Service) SendLogError(content string, err error) {
 	bll.adapter.Err(content, err)
-	bll.writeLog("Error", content, "")
+	bll.writeLog("Error", content, err.Error())
 }
 
 func (bll *Service) stop() {

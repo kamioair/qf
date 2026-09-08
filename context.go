@@ -34,7 +34,7 @@ type IContext interface {
 	GetDate(key string) qtime.Date
 	GetDateTime(key string) qtime.DateTime
 	GetFiles(key string) []File
-	GetStruct(key string, refStruct any)
+	GetStruct(refStruct any)
 	GetCommPack() CommPack
 	Raw() any
 }
@@ -186,7 +186,7 @@ func (c *context) GetFiles(key string) []File {
 	return nil
 }
 
-func (c *context) GetStruct(key string, refStruct any) {
+func (c *context) GetStruct(refStruct any) {
 	var val any
 
 	t := reflect.ValueOf(refStruct)
@@ -196,7 +196,7 @@ func (c *context) GetStruct(key string, refStruct any) {
 	if t.Kind() == reflect.Slice {
 		val = c.values.InputMaps
 	} else {
-		val = c.values.getValue(key)
+		val = c.values.InputRaw
 	}
 
 	// 先转为json

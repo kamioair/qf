@@ -9,6 +9,10 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 )
 
+replace (
+	github.com/kamioair/utils v0.0.8 => ../utils
+)
+
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // indirect

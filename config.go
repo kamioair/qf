@@ -170,14 +170,11 @@ func saveConfigFile() {
 	}
 
 	// 准备保存选项
-	opts := qconfig.SaveConfigOptions{
-		SectionDescs: map[string]string{
-			baseCfg.module: baseCfg.desc,
-		},
-	}
+	opts := qconfig.SaveContent{}
+	opts.Add(baseCfg.module, baseCfg.desc, baseCfg)
 
 	// 保存配置
-	err := qconfig.SaveConfig(baseCfg.filePath, &opts)
+	err := qconfig.SaveConfig(baseCfg.filePath, opts)
 	if err != nil {
 		fmt.Printf("保存配置文件失败: %v\n", err)
 	}
