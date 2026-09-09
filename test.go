@@ -31,7 +31,7 @@ func NewTest(moduleName string, moduleService IService, moduleConfig IConfig) *T
 	go run.Run()
 
 	service := &TestService{}
-	module := NewModule(fmt.Sprintf("QfTest.%d", time.Now().UnixNano()), "测试服务", "V1.0.260115B01", service, &config)
+	module := NewModule(fmt.Sprintf("QfTest.%d", time.Now().UnixNano()), "测试服务", "V1.0.260115B01", service, nil)
 	go module.Run()
 
 	// 等待片刻，确保服务启动完成
@@ -39,10 +39,3 @@ func NewTest(moduleName string, moduleService IService, moduleConfig IConfig) *T
 
 	return service
 }
-
-// config 配置定义
-var config = struct {
-	Config
-
-	// 自己模块的配置
-}{}

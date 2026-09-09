@@ -19,7 +19,7 @@ type IService interface {
 
 	// 内部使用的方法
 	stop()
-	setConfig(config *Config)
+	setConfig(config *BaseConfig)
 	setAdapter(adapter easyCon.IAdapter)
 	setWriteLog(writeLog func(level string, content string, err string))
 }
@@ -47,7 +47,7 @@ type OnNoticeFunc func(ctx IContext)
 type Service struct {
 	cronList []ICron
 	adapter  easyCon.IAdapter
-	config   *Config
+	config   *BaseConfig
 	writeLog func(level string, content string, err string)
 }
 
@@ -164,7 +164,7 @@ func (bll *Service) setWriteLog(writeLog func(level string, content string, err 
 	bll.writeLog = writeLog
 }
 
-func (bll *Service) setConfig(config *Config) {
+func (bll *Service) setConfig(config *BaseConfig) {
 	bll.config = config
 }
 

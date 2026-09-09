@@ -26,22 +26,20 @@ func NewModule(name, desc, version string, service IService, config IConfig) IMo
 		panic(errors.New("service cannot be nil"))
 	}
 
-	// 加载配置
-	loadConfig(name, desc, version, config)
-
 	// 创建基础模块
-	m := &module{
-		service: service,
-		config:  config,
-	}
+	m := &module{service: service}
+	// 给全局方法使用
 	instance = service
+
+	// 加载配置
+	m.config = loadConfig(name, desc, version, config)
 	return m
 }
 
 type module struct {
 	service IService
 	reg     *Reg
-	config  IConfig
+	config  *BaseConfig
 	adapter easyCon.IAdapter
 }
 
@@ -62,35 +60,33 @@ func (m *module) start() {
 		fmt.Println("-------------------------------------")
 	})
 
-	cfg := m.config.getBaseConfig()
 	fmt.Println("-------------------------------------")
-	fmt.Println(" Module:", cfg.module)
-	fmt.Println(" Desc:", cfg.desc)
-	fmt.Println(" ModuleVersion:", cfg.version)
+	fmt.Println(" Module:", m.config.module)
+	fmt.Println(" Desc:", m.config.desc)
+	fmt.Println(" ModuleVersion:", m.config.version)
 	fmt.Println(" FrameVersion:", Version)
 	fmt.Println("-------------------------------------")
 
 	m.reg = &Reg{}
 	m.service.Reg(m.reg)
-	m.service.setConfig(m.config.getBaseConfig())
+	m.service.setConfig(m.config)
 	m.service.setWriteLog(m.writeLog)
 
-	fmt.Printf("Connecting Broker... (Addr: %s)\n\n", cfg.Broker.Addr)
+	fmt.Printf("Connecting Broker... (Addr: %s)\n\n", m.config.Broker.Addr)
 	// 创建easyCon客户端
-	clientId := cfg.module
-	setting := easyCon.NewSetting(clientId, cfg.Broker.Addr, m.onReq, m.onState)
+	setting := easyCon.NewSetting(m.config.module, m.config.Broker.Addr, m.onReq, m.onState)
 	if m.reg.OnNotice != nil {
 		setting.OnNotice = m.reg.OnNotice
 	}
 	if m.reg.OnRetainNotice != nil {
 		setting.OnRetainNotice = m.reg.OnRetainNotice
 	}
-	setting.UID = cfg.Broker.UId
-	setting.PWD = cfg.Broker.Pwd
-	setting.TimeOut = time.Duration(cfg.Broker.TimeOut) * time.Millisecond
-	setting.ReTry = cfg.Broker.Retry
-	setting.LogMode = easyCon.ELogMode(cfg.Broker.LogMode)
-	setting.PreFix = cfg.Broker.Prefix
+	setting.UID = m.config.Broker.UId
+	setting.PWD = m.config.Broker.Pwd
+	setting.TimeOut = time.Duration(m.config.Broker.TimeOut) * time.Millisecond
+	setting.ReTry = m.config.Broker.Retry
+	setting.LogMode = easyCon.ELogMode(m.config.Broker.LogMode)
+	setting.PreFix = m.config.Broker.Prefix
 	setting.OnExiting = m.onExiting
 	setting.OnGetVersion = m.onGetVersion
 	if m.reg.OnLog != nil {
@@ -103,12 +99,10 @@ func (m *module) start() {
 	// 调用业务的初始化
 	m.service.setAdapter(m.adapter)
 
+	// 调用初始化
 	if m.reg.OnInit != nil {
 		m.reg.OnInit()
 	}
-
-	// 保存配置文件
-	saveConfigFile()
 
 	if setting.LogMode == easyCon.ELogModeConsole {
 		fmt.Println("")
@@ -148,10 +142,9 @@ func (m *module) onReq(pack easyCon.PackReq) (code easyCon.EResp, resp any) {
 		return easyCon.ERespSuccess, nil
 	case "Version":
 		ver := map[string]string{}
-		cfg := m.config.getBaseConfig()
-		ver["Module"] = cfg.module
-		ver["Desc"] = cfg.desc
-		ver["ModuleVersion"] = cfg.version
+		ver["Module"] = m.config.module
+		ver["Desc"] = m.config.desc
+		ver["ModuleVersion"] = m.config.version
 		ver["FrameVersion"] = Version
 		return easyCon.ERespSuccess, ver
 	}
@@ -211,7 +204,6 @@ func (m *module) formatStack(name string, row string) string {
 }
 
 func (m *module) writeLog(level string, content string, err string) {
-	baseCfg := m.config.getBaseConfig()
 	now := time.Now()
 	temp := "{Time} [{Level}] {Content} {Error}"
 	log := strings.Replace(temp, "{Time}", qconvert.Time.ToString(now, "yyyy-MM-dd HH:mm:ss"), 1)
@@ -220,11 +212,11 @@ func (m *module) writeLog(level string, content string, err string) {
 	log = strings.Replace(log, "{Error}", err, 1)
 	ym := qconvert.Time.ToString(now, "yyyy-MM")
 	day := qconvert.Time.ToString(now, "dd")
-	logFile := fmt.Sprintf("%s/%s/%s_%s_%s.log", "./log", ym, day, baseCfg.module, "Error")
+	logFile := fmt.Sprintf("%s/%s/%s_%s_%s.log", "./log", ym, day, m.config.module, "Error")
 	logFile = qio.GetFullPath(logFile)
 	_ = qio.WriteString(logFile, log, true)
 }
 
 func (m *module) onGetVersion() []string {
-	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", m.config.getBaseConfig().version)}
+	return []string{fmt.Sprintln("qf:", Version), fmt.Sprintln("module:", m.config.version)}
 }
