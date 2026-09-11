@@ -4,13 +4,9 @@ go 1.20
 
 require (
 	github.com/gobeam/stringy v0.0.7
-	github.com/kamioair/utils v0.0.8
+	github.com/kamioair/utils v0.1.5
 	github.com/qiu-tec/easy-con.golang v0.2.4
 	github.com/robfig/cron/v3 v3.0.1
-)
-
-replace (
-	github.com/kamioair/utils v0.0.8 => ../utils
 )
 
 require (
