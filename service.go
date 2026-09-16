@@ -40,9 +40,9 @@ type Reg struct {
 	OnLog           func(log easyCon.PackLog)
 }
 
-type OnReqFunc func(ctx IContext) (any, error)
+type OnReqFunc func(ctx *Context) (any, error)
 
-type OnNoticeFunc func(ctx IContext)
+type OnNoticeFunc func(ctx *Context)
 
 type Service struct {
 	cronList []ICron
@@ -52,7 +52,7 @@ type Service struct {
 }
 
 func (b *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, any) {
-	ctx, err1 := NewContent(pack.Content, &pack, nil)
+	ctx, err1 := NewContext(pack.Content, &pack, nil)
 	if err1 != nil {
 		return easyCon.ERespBadReq, err1.Error()
 	}
@@ -64,7 +64,7 @@ func (b *Service) Invoke(pack easyCon.PackReq, onReq OnReqFunc) (easyCon.EResp, 
 }
 
 func (b *Service) NoticeInvoke(pack easyCon.PackNotice, onReq OnNoticeFunc) {
-	ctx, err := NewContent(pack.Content, nil, &pack)
+	ctx, err := NewContext(pack.Content, nil, &pack)
 	if err != nil {
 		b.SendLogError(fmt.Sprintln("NoticeInvoke build invoke error", pack), err)
 	}
