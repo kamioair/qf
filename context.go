@@ -81,6 +81,10 @@ func setData(ctx *Context, data any) error {
 	return nil
 }
 
+func (c *Context) GetLoginUserId() uint64 {
+	return c.Get[uint64]("login_user_id")
+}
+
 // Get 泛型取值
 //   - key 为空：将整个入参转为 T（结构体取单条；[]X 取批量；反序列化失败 panic）
 //   - key 非空：从入参取指定 key 的值并转为 T（找不到或转换失败返回 T 的零值）
@@ -118,6 +122,15 @@ func (c *Context) Get[T any](key string) T {
 		return zero
 	}
 	return convertTo[T](raw)
+}
+
+// GetStruct 泛型取结构体
+//
+// 须显式指定类型实参：
+//
+//	ctx.GetStruct[anyStruct]()
+func (c *Context) GetStruct[T any]() T {
+	return c.Get[T]("")
 }
 
 // GetPackReq 返回请求包副本；无请求包时返回零值

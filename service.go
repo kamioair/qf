@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"reflect"
+	"time"
+
 	easyCon "github.com/qiu-tec/easy-con.golang"
 	"github.com/robfig/cron/v3"
-	"net"
-	"time"
 )
 
 type IService interface {
@@ -94,21 +96,48 @@ func (bll *Service) CreateCron() ICron {
 	return crn
 }
 
-// SendRequest 发送请求
-func (bll *Service) SendRequest(module, route string, params any) (any, error) {
+// SendRequest 发送请求并按指定类型返回响应。
+//
+// 返回值约定：
+//   - T 为 any：直接透传远端 Content（不做任何转换，省一次 JSON 往返）
+//   - T 为其他类型：按 Context.Get 整体取值的方式，将远端 Content 经 JSON 往返反序列化为 T
+//
+// 调用方须显式指定类型实参，例如：
+//
+//	user, err := svc.SendRequest[User]("user", "get", params)
+//	list, err := svc.SendRequest[[]User]("user", "list", params)
+//	raw,  err := svc.SendRequest[any]("user", "raw", params)
+//
+//	@param module 目标模块
+//	@param route  目标路由
+//	@param params 入参（任意可序列化类型）
+//	@return T      响应数据
+//	@return error 业务错误 / 反序列化失败
+func (bll *Service) SendRequest[T any](module, route string, params any) (T, error) {
+	var zero T
+
 	resp := bll.adapter.Req(module, route, params)
-	switch resp.RespCode {
-	case easyCon.ERespSuccess:
-		return resp.Content, nil
+	if resp.RespCode != easyCon.ERespSuccess {
+		err := errors.New(fmt.Sprintf("RespCode=%v, Msg=%s", resp.RespCode, resp.Error))
+		str, _ := json.Marshal(params)
+		bll.SendLogError(fmt.Sprintf("SendRequest To %s.%s Error InParams=%s", module, route, string(str)), err)
+		return zero, err
 	}
-	if resp.RespCode == easyCon.ERespSuccess {
-		return resp.Content, nil
+
+	// T 为 any 时直接透传，避免一次冗余的 JSON 往返
+	if reflect.TypeOf(zero) == reflect.TypeOf((*any)(nil)).Elem() {
+		return any(resp.Content).(T), nil
 	}
-	err := errors.New(fmt.Sprintf("RespCode=%v, Msg=%s", resp.RespCode, resp.Error))
-	// 记录日志
-	str, _ := json.Marshal(params)
-	bll.SendLogError(fmt.Sprintf("SendRequest To %s.%s Error InParams=%s", module, route, string(str)), err)
-	return nil, err
+
+	// 其他类型：与 Context.Get 整体取值一致，走 JSON 序列化-反序列化路径
+	js, err := json.Marshal(resp.Content)
+	if err != nil {
+		return zero, errors.New(fmt.Sprintf("marshal response failed: %v", err))
+	}
+	if err := json.Unmarshal(js, &zero); err != nil {
+		return zero, errors.New(fmt.Sprintf("unmarshal response to %T failed: %v", zero, err))
+	}
+	return zero, nil
 }
 
 // SendNotice 发送通知
@@ -219,7 +248,6 @@ func (crn *cronStruct) stop() {
 
 // Add 添加定时方法
 func (crn *cronStruct) Add(cron string, mission func()) (missionId int) {
-
 	iid, err := crn.crn.AddFunc(cron, mission)
 	if err != nil {
 		panic(err)
