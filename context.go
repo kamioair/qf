@@ -234,22 +234,50 @@ func toString(v any) string {
 	return fmt.Sprintf("%v", v)
 }
 
+// parseDateValue 任意值转 qtime.Date
+//
+// 注意两点（v1.4.4 修复）：
+//  1. json.Unmarshal 必须写入命名变量再取回字段——原实现把结果
+//     解析进匿名结构体字面量，外层变量从未被赋值，恒返回零值；
+//  2. 数字入参经 JSON 反序列化后是 float64，toString 走
+//     json.Marshal 会产出科学计数法（如 2.0991231235959e+13），
+//     dateparse 无法解析。数字类型直接截断转换，不走字符串解析。
 func parseDateValue(v any) qtime.Date {
-	var d qtime.Date
+	switch n := v.(type) {
+	case float64:
+		return qtime.Date(int64(n))
+	case int:
+		return qtime.Date(n)
+	case int64:
+		return qtime.Date(n)
+	case uint64:
+		return qtime.Date(n)
+	}
+	w := struct{ Time qtime.Date }{}
 	js := fmt.Sprintf("{\"Time\":\"%s\"}", toString(v))
-	_ = json.Unmarshal([]byte(js), &struct {
-		Time qtime.Date
-	}{Time: d})
-	return d
+	_ = json.Unmarshal([]byte(js), &w)
+	return w.Time
 }
 
+// parseDateTimeValue 任意值转 qtime.DateTime
+//
+// 数字入参直接转换（见 parseDateValue 注释）；字符串走
+// qtime.DateTime.UnmarshalJSON（dateparse 支持多种日期格式）。
 func parseDateTimeValue(v any) qtime.DateTime {
-	var t qtime.DateTime
+	switch n := v.(type) {
+	case float64:
+		return qtime.DateTime(int64(n))
+	case int:
+		return qtime.DateTime(n)
+	case int64:
+		return qtime.DateTime(n)
+	case uint64:
+		return qtime.DateTime(n)
+	}
+	w := struct{ Time qtime.DateTime }{}
 	js := fmt.Sprintf("{\"Time\":\"%s\"}", toString(v))
-	_ = json.Unmarshal([]byte(js), &struct {
-		Time qtime.DateTime
-	}{Time: t})
-	return t
+	_ = json.Unmarshal([]byte(js), &w)
+	return w.Time
 }
 
 func (d *values) load(content []byte) error {
